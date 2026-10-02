@@ -21,6 +21,15 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version: "1.24"
+      - name: Verify tag matches the Version constant
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          version="${TAG#v}"
+          if ! grep -qE "^[[:space:]]*Version = \"${version}\"$" client.go; then
+            echo "::error::client.go Version does not match tag ${TAG} (bin/release writes it via scripts/version)"
+            exit 1
+          fi
       - name: Fetch cassettes
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

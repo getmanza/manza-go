@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# bin/release adapter: print the current version, or write a new one into every
+# tracked file that carries it (the Version constant in client.go; a Go module's
+# version is the git tag, go.mod carries none).
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+if [ $# -eq 0 ]; then
+  sed -nE 's/^[[:space:]]*Version = "([^"]+)"$/\1/p' client.go
+  exit 0
+fi
+
+sed -i.bak -E "s/^([[:space:]]*Version = )\"[^\"]+\"$/\1\"$1\"/" client.go
+rm -f client.go.bak

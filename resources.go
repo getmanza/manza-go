@@ -3,6 +3,7 @@ package zazu
 import (
 	"context"
 	"net/url"
+	"strings"
 )
 
 // Attributes is a request body for create/update calls — snake_case keys,
@@ -60,10 +61,9 @@ func (s *AccountsService) GetTransaction(ctx context.Context, accountID, transac
 	return s.client.get(ctx, encodePath("api/accounts", accountID, "transactions", transactionID), nil)
 }
 
-// BeneficiariesService — read-only directory of saved transfer recipients.
-// Each beneficiary embeds its bank accounts; the one flagged `default` is
-// used when a transfer names only the beneficiary_id. Beneficiaries are
-// created and managed in the Zazu dashboard.
+// BeneficiariesService — saved transfer recipients. Each beneficiary embeds
+// its bank accounts; the one flagged `default` is used when a transfer names
+// only the beneficiary_id. There is no update or delete via the API.
 type BeneficiariesService struct{ client *Client }
 
 // List calls GET /api/beneficiaries.
@@ -76,12 +76,42 @@ func (s *BeneficiariesService) Get(ctx context.Context, id string) (*Response, e
 	return s.client.get(ctx, encodePath("api/beneficiaries", id), nil)
 }
 
+// Create calls POST /api/beneficiaries.
+// Attributes: beneficiary_type ("individual" | "business"; inferred from
+// person_name / company_name when omitted), person_name, company_name, email,
+// phone_number. Values must be strings. Shares a 10/minute limit with
+// CreateExternalAccount.
+func (s *BeneficiariesService) Create(ctx context.Context, attributes Attributes) (*Response, error) {
+	return s.client.post(ctx, "api/beneficiaries", attributes)
+}
+
+// ListExternalAccounts calls GET /api/beneficiaries/:beneficiary_id/external_accounts.
+func (s *BeneficiariesService) ListExternalAccounts(ctx context.Context, beneficiaryID string, params ListParams) (*Page, error) {
+	return s.client.listPage(ctx, encodePath("api/beneficiaries", beneficiaryID, "external_accounts"), nil, params)
+}
+
+// GetExternalAccount calls GET /api/beneficiaries/:beneficiary_id/external_accounts/:id.
+func (s *BeneficiariesService) GetExternalAccount(ctx context.Context, beneficiaryID, id string) (*Response, error) {
+	return s.client.get(ctx, encodePath("api/beneficiaries", beneficiaryID, "external_accounts", id), nil)
+}
+
+// CreateExternalAccount calls POST /api/beneficiaries/:beneficiary_id/external_accounts.
+// Required: account_number. Optional: name, country_code, currency_code,
+// account_type ("bank" only), bank_identifier (required in ZA, rejected in
+// MA, where it is derived from the RIB).
+func (s *BeneficiariesService) CreateExternalAccount(ctx context.Context, beneficiaryID string, attributes Attributes) (*Response, error) {
+	return s.client.post(ctx, encodePath("api/beneficiaries", beneficiaryID, "external_accounts"), attributes)
+}
+
 // CheckoutSessionsService — one-off hosted checkout sessions. No list,
 // update, or delete; sessions are created and inspected by id.
 type CheckoutSessionsService struct{ client *Client }
 
 // Create calls POST /api/checkout_sessions.
-// Required attributes: account_id, amount, success_url.
+// Required attributes: account_id, amount, success_url. Optional: cancel_url,
+// description, customer_email, customer_name, metadata, collect_billing_address,
+// billing_address. The response carries settled_at and transaction once the
+// session has cleared (status "clearing" → "complete").
 func (s *CheckoutSessionsService) Create(ctx context.Context, attributes Attributes) (*Response, error) {
 	return s.client.post(ctx, "api/checkout_sessions", attributes)
 }
@@ -231,15 +261,45 @@ func (s *PaymentLinksService) Cancel(ctx context.Context, id string) (*Response,
 	return s.client.post(ctx, encodePath("api/payment_links", id, "cancel"), nil)
 }
 
-// TransferDraftsService — API-initiated transfers. Creating a draft routes
-// it into the workspace's in-app approval flow; the API never executes a
-// transfer itself. Poll Get (status: requested → processing → completed /
-// failed) or subscribe to the `transfer.executed` webhook.
+// PayeeTrustRequestsService — requests to trust payees for
+// machine-authorized transfers. The API key can only ask: a member holding
+// payment-authorize permission approves the request in the Zazu app. Status:
+// pending → approved / declined / cancelled. No list, update, or delete.
+type PayeeTrustRequestsService struct{ client *Client }
+
+// Create calls POST /api/payee_trust_requests with at most 100 bank
+// account ids.
+func (s *PayeeTrustRequestsService) Create(ctx context.Context, externalAccountIDs []string) (*Response, error) {
+	return s.client.post(ctx, "api/payee_trust_requests", payeeTrustRequestBody{ExternalAccountIDs: externalAccountIDs})
+}
+
+// Get calls GET /api/payee_trust_requests/:id.
+func (s *PayeeTrustRequestsService) Get(ctx context.Context, id string) (*Response, error) {
+	return s.client.get(ctx, encodePath("api/payee_trust_requests", id), nil)
+}
+
+type payeeTrustRequestBody struct {
+	ExternalAccountIDs []string `json:"external_account_ids"`
+}
+
+// TransferDraftsService — API-initiated transfers. Creating a draft never
+// executes a transfer by itself. A draft inside the entity's
+// machine-authorization envelope (trusted payee, within limits) is sent to
+// the enrolled transfer authorizer as a `payment.authorization_requested`
+// webhook; answer it with Authorize or Decline, using an API key other than
+// the one that created the draft. Every other draft goes to the in-app
+// approval flow, where a manager or legal representative approves it. Poll
+// Get (status: requested → processing → completed / failed) or subscribe to
+// the `transfer.executed` webhook to follow execution.
 type TransferDraftsService struct{ client *Client }
 
 // Create calls POST /api/transfer_drafts.
 // Required: account_id, amount, and exactly one of beneficiary_id
 // (external transfer) or destination_account_id (own-account move).
+// Optional: external_account_id, currency_code, payment_reference,
+// internal_notes, client_reference (unique per entity, at most 128
+// characters; a duplicate returns a conflict *Error whose PaymentID names
+// the existing draft).
 func (s *TransferDraftsService) Create(ctx context.Context, attributes Attributes) (*Response, error) {
 	return s.client.post(ctx, "api/transfer_drafts", attributes)
 }
@@ -247,6 +307,43 @@ func (s *TransferDraftsService) Create(ctx context.Context, attributes Attribute
 // Get calls GET /api/transfer_drafts/:id.
 func (s *TransferDraftsService) Get(ctx context.Context, id string) (*Response, error) {
 	return s.client.get(ctx, encodePath("api/transfer_drafts", id), nil)
+}
+
+type authorizeBody struct {
+	AuthorizationID string `json:"authorization_id"`
+	Signature       string `json:"signature"`
+}
+
+// Authorize calls POST /api/transfer_drafts/:id/authorize.
+//
+// Executes the draft. authorizationID comes from the
+// `payment.authorization_requested` webhook; build signature with
+// SignatureInput and Sign. Requires the `transfers:authorize` scope on a key
+// other than the draft's creator (otherwise a forbidden *Error of type
+// `same_key_forbidden`). A blank signature is refused locally with
+// *ArgumentError: the API counts it as a failed attempt, and five fail the
+// challenge.
+func (s *TransferDraftsService) Authorize(ctx context.Context, id, authorizationID, signature string) (*Response, error) {
+	if strings.TrimSpace(signature) == "" {
+		return nil, &ArgumentError{Message: "signature cannot be blank"}
+	}
+	return s.client.post(ctx, encodePath("api/transfer_drafts", id, "authorize"),
+		authorizeBody{AuthorizationID: authorizationID, Signature: signature})
+}
+
+type declineBody struct {
+	AuthorizationID string `json:"authorization_id"`
+	Reason          string `json:"reason,omitempty"`
+}
+
+// Decline calls POST /api/transfer_drafts/:id/decline.
+//
+// Declines the challenge and deletes the draft; the response is the
+// authorization (status "declined"). An empty reason is omitted from the
+// request.
+func (s *TransferDraftsService) Decline(ctx context.Context, id, authorizationID, reason string) (*Response, error) {
+	return s.client.post(ctx, encodePath("api/transfer_drafts", id, "decline"),
+		declineBody{AuthorizationID: authorizationID, Reason: reason})
 }
 
 // WebhookEndpointsService — webhook endpoint management.

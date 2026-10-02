@@ -6,15 +6,31 @@ import (
 	"strconv"
 )
 
+// Error kinds, mirroring the shared Zazu SDK error hierarchy. Together with
+// ConfigurationError, ConnectionError and ArgumentError they make up the ten
+// classes every SDK exposes.
+const (
+	KindAuthentication = "authentication" // 401
+	KindForbidden      = "forbidden"      // 403
+	KindNotFound       = "not_found"      // 404
+	KindValidation     = "validation"     // 400, 422
+	KindConflict       = "conflict"       // 409
+	KindRateLimit      = "rate_limit"     // 429
+	KindServer         = "server"         // 5xx
+	KindAPI            = "api"            // any other non-2xx
+)
+
 // Error is the API error envelope, mirroring the other Zazu SDKs' hierarchy:
-// { "error": { "type": ..., "message": ..., "param": ... } }. Match on Kind
-// (or use errors.As with the sentinel helpers) instead of subclassing.
+// { "error": { "type": ..., "message": ..., "param": ..., "payment_id": ... } }.
+// Discriminate on Kind (errors.As to *Error, then compare against the Kind*
+// constants) instead of matching status codes.
 type Error struct {
 	Status     int
-	Kind       string // authentication, forbidden, not_found, validation, rate_limit, server, api
+	Kind       string // one of the Kind* constants
 	Type       string // the API's error.type field
 	Message    string
 	Param      string
+	PaymentID  string // only set for conflict: the draft already holding a duplicate client_reference
 	RequestID  string
 	RetryAfter int // seconds; only set for rate_limit
 	Body       map[string]any
@@ -32,6 +48,13 @@ type ConfigurationError struct{ Message string }
 
 func (e *ConfigurationError) Error() string { return "zazu: " + e.Message }
 
+// ArgumentError is returned when the caller passes a value the SDK refuses to
+// send (e.g. a blank signature). Distinct from *Error with KindValidation,
+// which is the server rejecting a request. No HTTP call was made.
+type ArgumentError struct{ Message string }
+
+func (e *ArgumentError) Error() string { return "zazu: " + e.Message }
+
 // ConnectionError wraps transport-level failures (timeouts, DNS, refused).
 type ConnectionError struct{ Message string }
 
@@ -48,26 +71,31 @@ func newError(status int, header http.Header, body map[string]any) *Error {
 		e.Type, _ = payload["type"].(string)
 		e.Message, _ = payload["message"].(string)
 		e.Param, _ = payload["param"].(string)
+		if status == 409 {
+			e.PaymentID, _ = payload["payment_id"].(string)
+		}
 	}
 
 	switch {
 	case status == 401:
-		e.Kind = "authentication"
+		e.Kind = KindAuthentication
 	case status == 403:
-		e.Kind = "forbidden"
+		e.Kind = KindForbidden
 	case status == 404:
-		e.Kind = "not_found"
-	case status == 422:
-		e.Kind = "validation"
+		e.Kind = KindNotFound
+	case status == 400, status == 422:
+		e.Kind = KindValidation
+	case status == 409:
+		e.Kind = KindConflict
 	case status == 429:
-		e.Kind = "rate_limit"
+		e.Kind = KindRateLimit
 		if retry := header.Get("Retry-After"); retry != "" {
 			e.RetryAfter, _ = strconv.Atoi(retry)
 		}
 	case status >= 500:
-		e.Kind = "server"
+		e.Kind = KindServer
 	default:
-		e.Kind = "api"
+		e.Kind = KindAPI
 	}
 
 	if e.Message == "" {

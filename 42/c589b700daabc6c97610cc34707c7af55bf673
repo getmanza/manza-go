@@ -1,0 +1,19 @@
+CLAUDE.md
+  s_079f1f00ed88e6::t_e9bdc4d8977414 1,3-60,62,64-78,80-84,87-162,166-168,171-202
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "42c589b700daabc6c97610cc34707c7af55bf673",
+  "prompts": {},
+  "sessions": {
+    "s_079f1f00ed88e6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b45600fa-a094-4f21-a314-2db468be6a6c",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}

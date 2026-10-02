@@ -83,7 +83,17 @@ endpoint's signing secret, and answer with a key other than the one that
 created the draft:
 
 ```go
-payee, err := zazu.PayeeFor(draft.ExternalAccountID, "") // or ("", destinationAccountID)
+// draft is a zazu.TransferDraft (decoded via resp.Decode) or your own record.
+// Its ExternalAccountID and ClientReference are *string: nil for an
+// own-account move and for a transfer without a client_reference.
+payee, err := zazu.PayeeFor(*draft.ExternalAccountID, "") // or ("", destinationAccountID)
+if err != nil {
+    return err
+}
+clientReference := ""
+if draft.ClientReference != nil {
+    clientReference = *draft.ClientReference
+}
 input := zazu.SignatureInput(zazu.TransferAuthorizationFields{
     PaymentID:       draft.ID,
     Nonce:           nonce,

@@ -130,7 +130,8 @@ type PaymentLink struct {
 }
 
 // Customer is an individual or business the entity invoices. TaxID and
-// ICENumber are market-gated: the keys are absent outside Morocco.
+// ICENumber are market-gated (absent outside Morocco); RegistrationNumber
+// and VATNumber are absent where the entity's market does not collect them.
 type Customer struct {
 	ID                 string  `json:"id"`
 	CustomerType       string  `json:"customer_type"`
@@ -139,8 +140,8 @@ type Customer struct {
 	CompanyName        *string `json:"company_name"`
 	Email              *string `json:"email"`
 	Phone              *string `json:"phone"`
-	RegistrationNumber *string `json:"registration_number"`
-	VATNumber          *string `json:"vat_number"`
+	RegistrationNumber *string `json:"registration_number,omitempty"`
+	VATNumber          *string `json:"vat_number,omitempty"`
 	TaxID              *string `json:"tax_id,omitempty"`
 	ICENumber          *string `json:"ice_number,omitempty"`
 	CreatedAt          string  `json:"created_at"`

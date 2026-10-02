@@ -1,4 +1,4 @@
-package zazu
+package manza
 
 import (
 	"crypto/hmac"

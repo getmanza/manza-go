@@ -41,7 +41,7 @@ For each failure:
 ### Reproduce locally
 
 ```bash
-# Cassettes (zazu-ruby's newest v* release, as CI does)
+# Cassettes (manza-ruby's release pinned in the script, as CI does)
 scripts/fetch-cassettes.sh
 
 # Test
@@ -59,7 +59,7 @@ gofmt -l . && go vet ./... && go test ./...
 
 If you can't reproduce locally, the failure is environmental (CI-only):
 - Different Go version → CI pins `go-version: "1.24"` in `ci.yml` and `release.yml`; `go.mod` says `go 1.24`
-- Newer cassettes → CI fetches the newest zazu-ruby `v*` release, so a fresh Ruby release can turn it red before this SDK catches up (run `scripts/fetch-cassettes.sh` locally to reproduce)
+- Newer cassettes → CI fetches the manza-ruby release pinned in `scripts/fetch-cassettes.sh` (`PINNED_TAG`), so a Ruby release only reaches CI when the pin is bumped (run `scripts/fetch-cassettes.sh` locally to reproduce)
 - Race condition → re-running the job fixes it
 - Network → external service (cassette tarball download, module proxy) hiccup; the fetch script already retries
 
@@ -70,7 +70,7 @@ Apply the five-whys ladder until you reach a fix point that prevents the same cl
 - Disable or `t.Skip` the failing test
 - Loosen the cassette matcher so the replay passes
 - Discard an error with `_ =` to quiet `go vet`
-- Call a live Zazu/Manza API to "check" a cassette (never; only zazu-ruby records)
+- Call a live Manza API to "check" a cassette (never; only manza-ruby records)
 
 These hide the failure; the underlying bug returns elsewhere.
 
@@ -136,12 +136,12 @@ If the failure was CI-config drift (workflow YAML out of sync with reality), als
 
 The request shape drifted from the recording. Check, in order:
 - Two cassettes sharing method + URI were loaded in one test (`transfer_drafts/authorize` vs `authorize_same_key`, `create` vs `create_duplicate`): load one per test.
-- A `fixtureIDs` entry in `cassette_test.go` drifted from zazu-ruby's `spec/support/fixture_ids.rb`: the URI no longer matches.
-- Body mismatch: matching is semantic JSON (the three `transfer_drafts/authorize*` cassettes ignore `signature`). Fix the SDK's request, never the cassette. A genuinely new request shape means re-recording in zazu-ruby and shipping a new SDK version.
+- A `fixtureIDs` entry in `cassette_test.go` drifted from manza-ruby's `spec/support/fixture_ids.rb`: the URI no longer matches.
+- Body mismatch: matching is semantic JSON (the three `transfer_drafts/authorize*` cassettes ignore `signature`). Fix the SDK's request, never the cassette. A genuinely new request shape means re-recording in manza-ruby and shipping a new SDK version.
 
 ### Cassette fetch fails
 
-`scripts/fetch-cassettes.sh` resolves the newest `v*` tag of zazu-ruby with `git ls-remote`, then downloads `cassettes-<tag>.tar.gz` from its GitHub release. Check that the release exists and carries the tarball. A transient 5xx is already retried 8 times. The script still names `getzazu/zazu-ruby` until the rename plan; The fetch still succeeds today.
+`scripts/fetch-cassettes.sh` downloads `cassettes-<PINNED_TAG>.tar.gz` from the manza-ruby GitHub release. Check that the release exists and carries the tarball. A transient 5xx is already retried 8 times.
 
 ### Release says the tag does not match the Version constant
 

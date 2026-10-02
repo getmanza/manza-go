@@ -1,10 +1,10 @@
-// Package zazu is the Go SDK for the Zazu API.
+// Package manza is the Go SDK for the Manza API.
 //
 // Response bodies are returned as-is from the API — snake_case keys in a
-// map. The same shape ships across every Zazu SDK (Ruby, TypeScript, Python,
+// map. The same shape ships across every Manza SDK (Ruby, TypeScript, Python,
 // Go, ...) so the cassette contract is one-to-one. Response.Decode maps a
 // body onto the typed models in types.go when you want structs.
-package zazu
+package manza
 
 import (
 	"bytes"
@@ -13,7 +13,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 	"time"
 )
@@ -28,8 +27,8 @@ const (
 
 // Client is the SDK entry point. Resources hang off it as fields.
 //
-//	client, err := zazu.New(zazu.WithAPIKey("sk_live_..."))
-//	page, err := client.Accounts.List(ctx, zazu.ListParams{})
+//	client, err := manza.New(manza.WithAPIKey("sk_live_..."))
+//	page, err := client.Accounts.List(ctx, manza.ListParams{})
 type Client struct {
 	apiKey     string
 	baseURL    string
@@ -51,32 +50,32 @@ type Client struct {
 // Option configures a Client.
 type Option func(*Client)
 
-// WithAPIKey sets the API key (default: the ZAZU_API_KEY env var).
+// WithAPIKey sets the API key (default: MANZA_API_KEY, falling back to the deprecated ZAZU_API_KEY).
 func WithAPIKey(key string) Option { return func(c *Client) { c.apiKey = key } }
 
-// WithBaseURL sets the API base URL (default: ZAZU_BASE_URL or
+// WithBaseURL sets the API base URL (default: MANZA_BASE_URL or
 // https://ma.manza.finance). South Africa is https://za.manza.finance.
 func WithBaseURL(u string) Option { return func(c *Client) { c.baseURL = u } }
 
-// WithAPIVersion pins the Zazu-Version request header (default: ZAZU_API_VERSION).
+// WithAPIVersion pins the Manza-Version request header (default: MANZA_API_VERSION).
 func WithAPIVersion(v string) Option { return func(c *Client) { c.apiVersion = v } }
 
 // WithHTTPClient swaps the underlying *http.Client (default: 30s timeout).
 func WithHTTPClient(h *http.Client) Option { return func(c *Client) { c.httpClient = h } }
 
 // New builds a Client. An API key is required — pass WithAPIKey or set
-// ZAZU_API_KEY.
+// MANZA_API_KEY.
 func New(opts ...Option) (*Client, error) {
 	c := &Client{
-		apiKey:     os.Getenv("ZAZU_API_KEY"),
-		baseURL:    os.Getenv("ZAZU_BASE_URL"),
-		apiVersion: os.Getenv("ZAZU_API_VERSION"),
+		apiKey:     getenv("API_KEY"),
+		baseURL:    getenv("BASE_URL"),
+		apiVersion: getenv("API_VERSION"),
 	}
 	for _, opt := range opts {
 		opt(c)
 	}
 	if c.apiKey == "" {
-		return nil, &ConfigurationError{Message: "missing API key: pass zazu.WithAPIKey or set ZAZU_API_KEY"}
+		return nil, &ConfigurationError{Message: "missing API key: pass manza.WithAPIKey or set MANZA_API_KEY"}
 	}
 	if c.baseURL == "" {
 		c.baseURL = defaultBaseURL
@@ -125,7 +124,7 @@ func (c *Client) Request(ctx context.Context, method, path string, params url.Va
 	if body != nil {
 		encoded, err := json.Marshal(body)
 		if err != nil {
-			return nil, fmt.Errorf("zazu: encode request body: %w", err)
+			return nil, fmt.Errorf("manza: encode request body: %w", err)
 		}
 		reader = bytes.NewReader(encoded)
 	} else {
@@ -134,16 +133,16 @@ func (c *Client) Request(ctx context.Context, method, path string, params url.Va
 
 	req, err := http.NewRequestWithContext(ctx, method, u, reader)
 	if err != nil {
-		return nil, fmt.Errorf("zazu: build request: %w", err)
+		return nil, fmt.Errorf("manza: build request: %w", err)
 	}
 	req.Header.Set("Authorization", "Bearer "+c.apiKey)
-	req.Header.Set("User-Agent", "zazu-go/"+Version)
+	req.Header.Set("User-Agent", "manza-go/"+Version)
 	req.Header.Set("Accept", "application/json")
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
 	if c.apiVersion != "" {
-		req.Header.Set("Zazu-Version", c.apiVersion)
+		req.Header.Set("Manza-Version", c.apiVersion)
 	}
 
 	raw, err := c.httpClient.Do(req)

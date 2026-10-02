@@ -118,7 +118,7 @@ gh api repos/{owner}/{repo}/pulls/<PR>/comments \
 CodeRabbit doesn't know:
 - The Karpathy guidelines we follow (no speculative abstractions, surgical changes).
 - Our snake_case wire format decision — it sometimes suggests camelCasing struct fields or `json` tags.
-- That zazu-ruby is the reference implementation — sometimes it suggests "improvements" the contract already settles.
+- That manza-ruby is the reference implementation — sometimes it suggests "improvements" the contract already settles.
 - The cassette-replay contract — it might suggest mocking `http.Client`, calling a live API, or byte-exact body matching, which breaks parity with the Ruby SDK.
 - The shared error model — it might suggest a new error type per status code instead of one `*Error` with a `Kind`.
 

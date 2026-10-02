@@ -1,4 +1,4 @@
-package zazu
+package manza
 
 // Typed response models. Decode a *Response onto one with Response.Decode.
 // Field names are the API's snake_case keys. Pointers mark values that can

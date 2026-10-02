@@ -1,27 +1,27 @@
-# zazu-go
+# manza-go
 
-Go SDK for the [Zazu](https://zazu.ma) API.
+Go SDK for the Manza API.
 
 ```bash
-go get github.com/getzazu/zazu-go
+go get github.com/getmanza/manza-go
 ```
 
 ```go
-import zazu "github.com/getzazu/zazu-go"
+import manza "github.com/getmanza/manza-go"
 
-client, err := zazu.New(zazu.WithAPIKey(os.Getenv("ZAZU_API_KEY")))
+client, err := manza.New(manza.WithAPIKey(os.Getenv("MANZA_API_KEY")))
 if err != nil { ... }
 
 entity, err := client.Entity.Get(ctx)
 
-page, err := client.Accounts.List(ctx, zazu.AccountListParams{})
+page, err := client.Accounts.List(ctx, manza.AccountListParams{})
 for _, account := range page.Data {
     fmt.Println(account["id"], account["name"])
 }
 
 // Initiate a transfer — it lands in your workspace's in-app approval
 // queue; the API never executes a transfer itself.
-draft, err := client.TransferDrafts.Create(ctx, zazu.Attributes{
+draft, err := client.TransferDrafts.Create(ctx, manza.Attributes{
     "account_id":        accountID,
     "beneficiary_id":    beneficiaryID,
     "amount":            "150.00",
@@ -32,7 +32,7 @@ draft, err := client.TransferDrafts.Create(ctx, zazu.Attributes{
 ## Response shape
 
 Response bodies are returned as-is from the API — `snake_case` keys in a
-`map[string]any` (`resp.Body`). The same shape ships across every Zazu SDK
+`map[string]any` (`resp.Body`). The same shape ships across every Manza SDK
 (Ruby, TypeScript, Python, Go, ...) so the cassette contract is one-to-one.
 
 For typed access, decode the raw body onto a model from `types.go`
@@ -40,7 +40,7 @@ For typed access, decode the raw body onto a model from `types.go`
 `CheckoutSession`, `PaymentLink`, `Customer`, `Invoice`, `Authorization`):
 
 ```go
-var draft zazu.TransferDraft
+var draft manza.TransferDraft
 if err := resp.Decode(&draft); err != nil { ... }
 ```
 
@@ -54,7 +54,7 @@ outside Morocco, so they are pointers and `nil` there.
 | Morocco (default) | `https://ma.manza.finance` |
 | South Africa | `https://za.manza.finance` |
 
-Override with `zazu.WithBaseURL(...)` or `ZAZU_BASE_URL`. The replay
+Override with `manza.WithBaseURL(...)` or `MANZA_BASE_URL` (the legacy `ZAZU_BASE_URL` still works, with a one-time deprecation warning). The replay
 cassettes were recorded against `https://ma.manza.dev` (the staging host).
 
 ## Resources
@@ -83,10 +83,10 @@ endpoint's signing secret, and answer with a key other than the one that
 created the draft:
 
 ```go
-// draft is a zazu.TransferDraft (decoded via resp.Decode) or your own record.
+// draft is a manza.TransferDraft (decoded via resp.Decode) or your own record.
 // Its ExternalAccountID and ClientReference are *string: nil for an
 // own-account move and for a transfer without a client_reference.
-payee, err := zazu.PayeeFor(*draft.ExternalAccountID, "") // or ("", destinationAccountID)
+payee, err := manza.PayeeFor(*draft.ExternalAccountID, "") // or ("", destinationAccountID)
 if err != nil {
     return err
 }
@@ -94,7 +94,7 @@ clientReference := ""
 if draft.ClientReference != nil {
     clientReference = *draft.ClientReference
 }
-input := zazu.SignatureInput(zazu.TransferAuthorizationFields{
+input := manza.SignatureInput(manza.TransferAuthorizationFields{
     PaymentID:       draft.ID,
     Nonce:           nonce,
     Amount:          draft.Amount, // the API's string verbatim, e.g. "2500.0"
@@ -103,13 +103,13 @@ input := zazu.SignatureInput(zazu.TransferAuthorizationFields{
     Payee:           payee,
     ClientReference: clientReference, // "" when the transfer has none
 })
-signature := zazu.Sign(signingSecret, input) // lowercase hex HMAC-SHA256
+signature := manza.Sign(signingSecret, input) // lowercase hex HMAC-SHA256
 
 resp, err := authorizerClient.TransferDrafts.Authorize(ctx, draft.ID, authorizationID, signature)
 // or: authorizerClient.TransferDrafts.Decline(ctx, draft.ID, authorizationID, "reason") // "" omits reason
 ```
 
-`Authorize` refuses a blank signature locally (`*zazu.ArgumentError`)
+`Authorize` refuses a blank signature locally (`*manza.ArgumentError`)
 because the API counts a missing signature as a failed attempt.
 `Create` accepts an optional `client_reference` (at most 128 characters,
 unique per entity); a duplicate returns a conflict error carrying the
@@ -117,28 +117,28 @@ existing draft's `PaymentID`.
 
 ## Errors
 
-Non-2xx responses come back as `*zazu.Error` with `Status`, `Kind`
-(`zazu.KindAuthentication`, `KindForbidden`, `KindNotFound`,
+Non-2xx responses come back as `*manza.Error` with `Status`, `Kind`
+(`manza.KindAuthentication`, `KindForbidden`, `KindNotFound`,
 `KindValidation` for 400 and 422, `KindConflict` for 409, `KindRateLimit`,
 `KindServer`, `KindAPI`), the API's `Type`/`Message`/`Param`, and the
 `RequestID`. A conflict also carries `PaymentID`. Discriminate on `Kind`,
 not on status codes:
 
 ```go
-var apiErr *zazu.Error
-if errors.As(err, &apiErr) && apiErr.Kind == zazu.KindConflict {
+var apiErr *manza.Error
+if errors.As(err, &apiErr) && apiErr.Kind == manza.KindConflict {
     fmt.Println("already created as", apiErr.PaymentID)
 }
 ```
 
-Transport failures are `*zazu.ConnectionError`, a misconfigured client is
-`*zazu.ConfigurationError`, and a value the SDK refuses to send is
-`*zazu.ArgumentError`.
+Transport failures are `*manza.ConnectionError`, a misconfigured client is
+`*manza.ConfigurationError`, and a value the SDK refuses to send is
+`*manza.ArgumentError`.
 
 ## Tests
 
 Tests replay the canonical cassettes recorded by
-[zazu-ruby](https://github.com/getzazu/zazu-ruby). The cassettes are
+[manza-ruby](https://github.com/getmanza/manza-ruby). The cassettes are
 downloaded from the Ruby SDK's release tarball and served from an
 `httptest.Server`. Same interactions, same assertions, every language.
 
@@ -149,7 +149,7 @@ go test ./...
 
 ## The SDK family
 
-- [zazu-ruby](https://github.com/getzazu/zazu-ruby) — reference implementation (records the cassettes)
-- [zazu-ts](https://github.com/getzazu/zazu-ts)
-- [zazu-python](https://github.com/getzazu/zazu-python)
-- [cli](https://github.com/getzazu/cli)
+- [manza-ruby](https://github.com/getmanza/manza-ruby) — reference implementation (records the cassettes)
+- [manza-ts](https://github.com/getmanza/manza-ts)
+- [manza-python](https://github.com/getmanza/manza-python)
+- [cli](https://github.com/getmanza/cli)

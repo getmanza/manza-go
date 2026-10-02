@@ -1,4 +1,4 @@
-package zazu
+package manza
 
 import (
 	"fmt"
@@ -6,7 +6,7 @@ import (
 	"strconv"
 )
 
-// Error kinds, mirroring the shared Zazu SDK error hierarchy. Together with
+// Error kinds, mirroring the shared Manza SDK error hierarchy. Together with
 // ConfigurationError, ConnectionError and ArgumentError they make up the ten
 // classes every SDK exposes.
 const (
@@ -20,7 +20,7 @@ const (
 	KindAPI            = "api"            // any other non-2xx
 )
 
-// Error is the API error envelope, mirroring the other Zazu SDKs' hierarchy:
+// Error is the API error envelope, mirroring the other Manza SDKs' hierarchy:
 // { "error": { "type": ..., "message": ..., "param": ..., "payment_id": ... } }.
 // Discriminate on Kind (errors.As to *Error, then compare against the Kind*
 // constants) instead of matching status codes.
@@ -38,27 +38,27 @@ type Error struct {
 
 func (e *Error) Error() string {
 	if e.Param != "" {
-		return fmt.Sprintf("zazu: %s (%d %s, param %s)", e.Message, e.Status, e.Kind, e.Param)
+		return fmt.Sprintf("manza: %s (%d %s, param %s)", e.Message, e.Status, e.Kind, e.Param)
 	}
-	return fmt.Sprintf("zazu: %s (%d %s)", e.Message, e.Status, e.Kind)
+	return fmt.Sprintf("manza: %s (%d %s)", e.Message, e.Status, e.Kind)
 }
 
 // ConfigurationError is returned by New when the client can't be built.
 type ConfigurationError struct{ Message string }
 
-func (e *ConfigurationError) Error() string { return "zazu: " + e.Message }
+func (e *ConfigurationError) Error() string { return "manza: " + e.Message }
 
 // ArgumentError is returned when the caller passes a value the SDK refuses to
 // send (e.g. a blank signature). Distinct from *Error with KindValidation,
 // which is the server rejecting a request. No HTTP call was made.
 type ArgumentError struct{ Message string }
 
-func (e *ArgumentError) Error() string { return "zazu: " + e.Message }
+func (e *ArgumentError) Error() string { return "manza: " + e.Message }
 
 // ConnectionError wraps transport-level failures (timeouts, DNS, refused).
 type ConnectionError struct{ Message string }
 
-func (e *ConnectionError) Error() string { return "zazu: connection error: " + e.Message }
+func (e *ConnectionError) Error() string { return "manza: connection error: " + e.Message }
 
 func newError(status int, header http.Header, body map[string]any) *Error {
 	e := &Error{

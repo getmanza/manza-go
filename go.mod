@@ -1,4 +1,4 @@
-module github.com/getzazu/zazu-go
+module github.com/getmanza/manza-go
 
 go 1.24
 

@@ -1,8 +1,9 @@
 // Package zazu is the Go SDK for the Zazu API.
 //
-// Response bodies are returned as-is from the API — snake_case keys, no
-// struct mapping. The same shape ships across every Zazu SDK (Ruby,
-// TypeScript, Python, Go, ...) so the cassette contract is one-to-one.
+// Response bodies are returned as-is from the API — snake_case keys in a
+// map. The same shape ships across every Zazu SDK (Ruby, TypeScript, Python,
+// Go, ...) so the cassette contract is one-to-one. Response.Decode maps a
+// body onto the typed models in types.go when you want structs.
 package zazu
 
 import (
@@ -21,7 +22,7 @@ const (
 	// Version is the SDK version, sent in the User-Agent header.
 	Version = "0.2.1"
 
-	defaultBaseURL = "https://zazu.ma"
+	defaultBaseURL = "https://ma.manza.finance"
 	defaultTimeout = 30 * time.Second
 )
 
@@ -35,15 +36,16 @@ type Client struct {
 	apiVersion string
 	httpClient *http.Client
 
-	Accounts         *AccountsService
-	Beneficiaries    *BeneficiariesService
-	CheckoutSessions *CheckoutSessionsService
-	Customers        *CustomersService
-	Entity           *EntityService
-	Invoices         *InvoicesService
-	PaymentLinks     *PaymentLinksService
-	TransferDrafts   *TransferDraftsService
-	WebhookEndpoints *WebhookEndpointsService
+	Accounts           *AccountsService
+	Beneficiaries      *BeneficiariesService
+	CheckoutSessions   *CheckoutSessionsService
+	Customers          *CustomersService
+	Entity             *EntityService
+	Invoices           *InvoicesService
+	PayeeTrustRequests *PayeeTrustRequestsService
+	PaymentLinks       *PaymentLinksService
+	TransferDrafts     *TransferDraftsService
+	WebhookEndpoints   *WebhookEndpointsService
 }
 
 // Option configures a Client.
@@ -52,7 +54,8 @@ type Option func(*Client)
 // WithAPIKey sets the API key (default: the ZAZU_API_KEY env var).
 func WithAPIKey(key string) Option { return func(c *Client) { c.apiKey = key } }
 
-// WithBaseURL sets the API base URL (default: ZAZU_BASE_URL or https://zazu.ma).
+// WithBaseURL sets the API base URL (default: ZAZU_BASE_URL or
+// https://ma.manza.finance). South Africa is https://za.manza.finance.
 func WithBaseURL(u string) Option { return func(c *Client) { c.baseURL = u } }
 
 // WithAPIVersion pins the Zazu-Version request header (default: ZAZU_API_VERSION).
@@ -89,6 +92,7 @@ func New(opts ...Option) (*Client, error) {
 	c.Customers = &CustomersService{client: c}
 	c.Entity = &EntityService{client: c}
 	c.Invoices = &InvoicesService{client: c}
+	c.PayeeTrustRequests = &PayeeTrustRequestsService{client: c}
 	c.PaymentLinks = &PaymentLinksService{client: c}
 	c.TransferDrafts = &TransferDraftsService{client: c}
 	c.WebhookEndpoints = &WebhookEndpointsService{client: c}
@@ -101,6 +105,12 @@ type Response struct {
 	RequestID string
 	Body      map[string]any
 	Raw       []byte
+}
+
+// Decode unmarshals the raw response body into v, typically one of the
+// models in types.go (TransferDraft, CheckoutSession, ...).
+func (r *Response) Decode(v any) error {
+	return json.Unmarshal(r.Raw, v)
 }
 
 // Request performs an HTTP request against the API. Non-2xx responses are

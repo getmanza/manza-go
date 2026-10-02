@@ -19,7 +19,7 @@ import (
 
 const (
 	// Version is the SDK version, sent in the User-Agent header.
-	Version = "0.1.0"
+	Version = "0.2.1"
 
 	defaultBaseURL = "https://zazu.ma"
 	defaultTimeout = 30 * time.Second

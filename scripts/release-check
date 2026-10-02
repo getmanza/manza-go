@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# bin/release adapter: must pass before the version bump is committed (mirrors CI).
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+scripts/fetch-cassettes.sh   # the replay tests need the zazu-ruby cassette tarball, as in CI
+
+unformatted=$(gofmt -l .)
+if [[ -n "$unformatted" ]]; then
+  echo "gofmt needed on:" >&2
+  echo "$unformatted" >&2
+  exit 1
+fi
+
+go vet ./...
+go test ./...

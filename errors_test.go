@@ -57,6 +57,7 @@ func TestDefaultBaseURL(t *testing.T) {
 		return nil, errors.New("stop")
 	})
 	t.Setenv("MANZA_BASE_URL", "")
+	t.Setenv("ZAZU_BASE_URL", "")
 	client, err := manza.New(manza.WithAPIKey("k"), manza.WithHTTPClient(&http.Client{Transport: transport}))
 	if err != nil {
 		t.Fatal(err)

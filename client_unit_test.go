@@ -9,6 +9,7 @@ import (
 
 func TestNewRequiresAPIKey(t *testing.T) {
 	t.Setenv("MANZA_API_KEY", "")
+	t.Setenv("ZAZU_API_KEY", "")
 
 	_, err := manza.New()
 	if err == nil {

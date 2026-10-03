@@ -84,9 +84,17 @@ created the draft:
 
 ```go
 // draft is a manza.TransferDraft (decoded via resp.Decode) or your own record.
-// Its ExternalAccountID and ClientReference are *string: nil for an
-// own-account move and for a transfer without a client_reference.
-payee, err := manza.PayeeFor(*draft.ExternalAccountID, "") // or ("", destinationAccountID)
+// Its ExternalAccountID, DestinationAccountID and ClientReference are *string:
+// exactly one of the first two is set, and ClientReference is nil for a
+// transfer without a client_reference.
+externalAccountID, destinationAccountID := "", ""
+if draft.ExternalAccountID != nil {
+    externalAccountID = *draft.ExternalAccountID
+}
+if draft.DestinationAccountID != nil {
+    destinationAccountID = *draft.DestinationAccountID
+}
+payee, err := manza.PayeeFor(externalAccountID, destinationAccountID)
 if err != nil {
     return err
 }

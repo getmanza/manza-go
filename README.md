@@ -1,5 +1,7 @@
 # zazu-go
 
+> **Deprecated.** This module is now [`github.com/getmanza/manza-go`](https://github.com/getmanza/manza-go) (`go get github.com/getmanza/manza-go`, package `manza`). `zazu-go` gets no further updates.
+
 Go SDK for the [Zazu](https://zazu.ma) API.
 
 ```bash

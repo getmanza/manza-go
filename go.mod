@@ -1,3 +1,4 @@
+// Deprecated: renamed to github.com/getmanza/manza-go.
 module github.com/getzazu/zazu-go
 
 go 1.24

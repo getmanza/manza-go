@@ -4,6 +4,9 @@
 // map. The same shape ships across every Zazu SDK (Ruby, TypeScript, Python,
 // Go, ...) so the cassette contract is one-to-one. Response.Decode maps a
 // body onto the typed models in types.go when you want structs.
+//
+// Deprecated: this module is renamed. Use github.com/getmanza/manza-go
+// (package manza) instead; zazu-go gets no further updates.
 package zazu
 
 import (
@@ -20,7 +23,7 @@ import (
 
 const (
 	// Version is the SDK version, sent in the User-Agent header.
-	Version = "0.3.0"
+	Version = "0.3.1"
 
 	defaultBaseURL = "https://ma.manza.finance"
 	defaultTimeout = 30 * time.Second

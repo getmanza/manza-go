@@ -5,7 +5,17 @@ All notable changes to `zazu-go` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.3.1]
+
+Final release under the old `github.com/getzazu/zazu-go` module path.
+
+### Deprecated
+
+- The module is renamed to `github.com/getmanza/manza-go` (package `manza`).
+  `go.mod` and the package doc now carry `Deprecated:` notices, so `go`
+  tooling and pkg.go.dev flag the old path. No further releases here.
+
+## [0.3.0]
 
 Syncs the SDK with the API changes since 2026-07-16, matching zazu-ruby 0.3.0.
 

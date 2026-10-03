@@ -47,10 +47,16 @@ jobs:
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # bin/release creates the release (and the tag) itself; only a tag
+        # pushed by hand reaches here without one.
         run: |
           tag="${GITHUB_REF#refs/tags/}"
-          gh release create "$tag" --title "$tag" \
-            --notes "See [CHANGELOG.md](https://github.com/${GITHUB_REPOSITORY}/blob/main/CHANGELOG.md). Install: \`go get github.com/getmanza/manza-go@$tag\`"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "$tag already published"
+          else
+            gh release create "$tag" --title "$tag" \
+              --notes "See [CHANGELOG.md](https://github.com/${GITHUB_REPOSITORY}/blob/main/CHANGELOG.md). Install: \`go get github.com/getmanza/manza-go@$tag\`"
+          fi
 
       - name: Warm the module proxy index
         run: |

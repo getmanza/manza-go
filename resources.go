@@ -1,4 +1,4 @@
-package zazu
+package manza
 
 import (
 	"context"
@@ -263,7 +263,7 @@ func (s *PaymentLinksService) Cancel(ctx context.Context, id string) (*Response,
 
 // PayeeTrustRequestsService — requests to trust payees for
 // machine-authorized transfers. The API key can only ask: a member holding
-// payment-authorize permission approves the request in the Zazu app. Status:
+// payment-authorize permission approves the request in the Manza app. Status:
 // pending → approved / declined / cancelled. No list, update, or delete.
 type PayeeTrustRequestsService struct{ client *Client }
 

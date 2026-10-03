@@ -68,18 +68,18 @@ Project conventions:
 
 | Use | Instead of |
 |-----|-----------|
-| `zazu.New(zazu.WithAPIKey(...))` client and its services | hand-rolled `http.NewRequest` |
+| `manza.New(manza.WithAPIKey(...))` client and its services | hand-rolled `http.NewRequest` |
 | `Client.get/post/patch/delete` and `encodePath` | string-concatenated URLs |
-| `zazu.Page` via `listPage`, `Next(ctx)` | manual cursor loop |
-| `errors.As(err, &apiErr)` then `apiErr.Kind == zazu.KindConflict` etc. | status-code switching |
-| `*zazu.ArgumentError` for a value the SDK refuses to send | `fmt.Errorf` in new code |
+| `manza.Page` via `listPage`, `Next(ctx)` | manual cursor loop |
+| `errors.As(err, &apiErr)` then `apiErr.Kind == manza.KindConflict` etc. | status-code switching |
+| `*manza.ArgumentError` for a value the SDK refuses to send | `fmt.Errorf` in new code |
 | snake_case keys and `json` tags for wire-format bodies | auto-camelCasing |
 | `go test` (stdlib `testing`) | testify, ginkgo |
 | `gofmt` + `go vet` | extra linters |
 | Cassette replay via `startReplayServer` in `cassette_test.go`, IDs via `fixtureID()` | mocking `http.Client` per test |
 | `SignatureInput` / `Sign` / `PayeeFor` in `transfer_authorization.go` | hand-built signature strings |
 
-**Never call a live Zazu/Manza API.** Not from tests, scripts or this session. Tests replay zazu-ruby's cassettes (`scripts/fetch-cassettes.sh`, recorded against `https://ma.manza.dev`) through an `httptest.Server`, loading one cassette per test. Live staging calls create real transfers and approval requests for the team, and only zazu-ruby records cassettes. If a change needs a new cassette, that is a zazu-ruby change first.
+**Never call a live Manza API.** Not from tests, scripts or this session. Tests replay manza-ruby's cassettes (`scripts/fetch-cassettes.sh`, recorded against `https://ma.manza.dev`) through an `httptest.Server`, loading one cassette per test. Live staging calls create real transfers and approval requests for the team, and only manza-ruby records cassettes. If a change needs a new cassette, that is a manza-ruby change first.
 
 ### 4.3 Refactor
 
@@ -122,7 +122,7 @@ All must pass before committing:
 ```bash
 gofmt -l .                           # prints nothing
 go vet ./...                         # lint (the compiler is the typechecker)
-go test ./...                        # all green, against the latest zazu-ruby cassettes
+go test ./...                        # all green, against the pinned manza-ruby cassettes
 ```
 
 Re-read the original requirements: would the requester consider this fully resolved? Have you addressed the root cause? Do the tests prove the fix?

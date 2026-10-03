@@ -50,9 +50,9 @@ jobs:
         run: |
           tag="${GITHUB_REF#refs/tags/}"
           gh release create "$tag" --title "$tag" \
-            --notes "See [CHANGELOG.md](https://github.com/${GITHUB_REPOSITORY}/blob/main/CHANGELOG.md). Install: \`go get github.com/getzazu/zazu-go@$tag\`"
+            --notes "See [CHANGELOG.md](https://github.com/${GITHUB_REPOSITORY}/blob/main/CHANGELOG.md). Install: \`go get github.com/getmanza/manza-go@$tag\`"
 
       - name: Warm the module proxy index
         run: |
           tag="${GITHUB_REF#refs/tags/}"
-          curl -fsSL "https://proxy.golang.org/github.com/getzazu/zazu-go/@v/$tag.info" || true
+          curl -fsSL "https://proxy.golang.org/github.com/getmanza/manza-go/@v/$tag.info" || true

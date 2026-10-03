@@ -1,4 +1,4 @@
-package zazu_test
+package manza_test
 
 import (
 	"context"
@@ -8,20 +8,20 @@ import (
 	"strconv"
 	"testing"
 
-	zazu "github.com/getzazu/zazu-go"
+	manza "github.com/getmanza/manza-go"
 )
 
 func TestErrorKindByStatus(t *testing.T) {
 	cases := map[int]string{
-		400: zazu.KindValidation,
-		401: zazu.KindAuthentication,
-		403: zazu.KindForbidden,
-		404: zazu.KindNotFound,
-		409: zazu.KindConflict,
-		422: zazu.KindValidation,
-		429: zazu.KindRateLimit,
-		500: zazu.KindServer,
-		418: zazu.KindAPI,
+		400: manza.KindValidation,
+		401: manza.KindAuthentication,
+		403: manza.KindForbidden,
+		404: manza.KindNotFound,
+		409: manza.KindConflict,
+		422: manza.KindValidation,
+		429: manza.KindRateLimit,
+		500: manza.KindServer,
+		418: manza.KindAPI,
 	}
 	for status, kind := range cases {
 		t.Run(strconv.Itoa(status), func(t *testing.T) {
@@ -32,9 +32,9 @@ func TestErrorKindByStatus(t *testing.T) {
 			t.Cleanup(server.Close)
 
 			_, err := replayClient(t, server).Entity.Get(context.Background())
-			var apiErr *zazu.Error
+			var apiErr *manza.Error
 			if !errors.As(err, &apiErr) {
-				t.Fatalf("expected *zazu.Error, got %T", err)
+				t.Fatalf("expected *manza.Error, got %T", err)
 			}
 			if apiErr.Kind != kind {
 				t.Fatalf("status %d: expected kind %q, got %q", status, kind, apiErr.Kind)
@@ -56,8 +56,9 @@ func TestDefaultBaseURL(t *testing.T) {
 		host = r.URL.Scheme + "://" + r.URL.Host
 		return nil, errors.New("stop")
 	})
+	t.Setenv("MANZA_BASE_URL", "")
 	t.Setenv("ZAZU_BASE_URL", "")
-	client, err := zazu.New(zazu.WithAPIKey("k"), zazu.WithHTTPClient(&http.Client{Transport: transport}))
+	client, err := manza.New(manza.WithAPIKey("k"), manza.WithHTTPClient(&http.Client{Transport: transport}))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -7,6 +7,27 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### 1.0.0: renamed from zazu-go to manza-go
+
+The SDK is now `manza-go`. This is a source-breaking change for Go: update `go.mod` and every import. A GitHub redirect does not fix the module path. Go 1.0.0 needs no `/v2` suffix.
+
+- Module `github.com/getmanza/manza-go`, package `manza`; error messages are prefixed `manza: `
+- Request header `Manza-Version` (was `Zazu-Version`); User-Agent `manza-go/<version>`
+- `MANZA_API_KEY`, `MANZA_BASE_URL` and `MANZA_API_VERSION` are read first. The `ZAZU_*` names still work as a fallback and print a one-time deprecation warning per variable to stderr, for all of 1.x
+- Cassettes are fetched from `getmanza/manza-ruby`, pinned to `v1.0.0`; fixture env vars are `MANZA_FIXTURE_*` (no fallback, dev-only)
+
+#### Migration
+
+| Old | New |
+|---|---|
+| `go get github.com/getzazu/zazu-go` | `go get github.com/getmanza/manza-go` |
+| `import zazu "github.com/getzazu/zazu-go"` | `import manza "github.com/getmanza/manza-go"` |
+| `package zazu`, `zazu.New`, `zazu.Client`, `zazu.Error`, ... | `manza.New`, `manza.Client`, `manza.Error`, ... (same identifiers under the new package name; none contained `Zazu`) |
+| `ZAZU_API_KEY` / `ZAZU_BASE_URL` / `ZAZU_API_VERSION` | `MANZA_API_KEY` / `MANZA_BASE_URL` / `MANZA_API_VERSION` |
+| `Zazu-Version` header | `Manza-Version` |
+| `ZAZU_FIXTURE_*` (tests) | `MANZA_FIXTURE_*` |
+
+
 Syncs the SDK with the API changes since 2026-07-16, matching zazu-ruby 0.3.0.
 
 ### Added

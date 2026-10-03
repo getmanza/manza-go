@@ -1,6 +1,6 @@
-# zazu-go
+# manza-go
 
-Go SDK for the Zazu API. This SDK **replays zazu-ruby's cassettes**; it never records. zazu-ruby is the reference implementation of the cross-language SDK family: the same cassettes are replayed by zazu-ts, zazu-python and the rest, which is what keeps the wire format identical everywhere.
+Go SDK for the Manza API. This SDK **replays manza-ruby's cassettes**; it never records. manza-ruby is the reference implementation of the cross-language SDK family: the same cassettes are replayed by manza-ts, manza-python and the rest, which is what keeps the wire format identical everywhere.
 
 ## Stack
 
@@ -9,45 +9,45 @@ Go SDK for the Zazu API. This SDK **replays zazu-ruby's cassettes**; it never re
 | Language | Go 1.24 | `go.mod` (`go 1.24`); CI runs one version, 1.24 (`.github/workflows/ci.yml`) |
 | HTTP | `net/http` | `client.go`. Default timeout 30s; swap via `WithHTTPClient` |
 | Test runner | `go test` | Flat package: `*_test.go` next to the source in the repo root |
-| Cassette replay (tests) | `httptest.Server` + `gopkg.in/yaml.v3` | `cassette_test.go`. Reads zazu-ruby's release tarball from `testdata/cassettes/` (gitignored) |
+| Cassette replay (tests) | `httptest.Server` + `gopkg.in/yaml.v3` | `cassette_test.go`. Reads manza-ruby's release tarball from `testdata/cassettes/` (gitignored) |
 | Format | `gofmt` | CI fails on any file `gofmt -l .` prints |
 | Lint / type-check | `go vet ./...` | No golangci-lint, no separate typechecker (the compiler is it) |
-| Package registry | none | The Go module proxy indexes git tags (`proxy.golang.org`, `pkg.go.dev`). Module path is `github.com/getzazu/zazu-go` until the rename plan moves it |
-| Release | `bin/release` | zazu SDK release kit (byte-identical across SDK repos; repo-specific bits in `scripts/version` + `scripts/release-check`) |
+| Package registry | none | The Go module proxy indexes git tags (`proxy.golang.org`, `pkg.go.dev`). Module path is `github.com/getmanza/manza-go` (1.0.0 needs no `/v2` suffix) |
+| Release | `bin/release` | manza SDK release kit (byte-identical across SDK repos; repo-specific bits in `scripts/version` + `scripts/release-check`) |
 
 ## Public API surface
 
 ```go
-client, err := zazu.New(zazu.WithAPIKey("sk_live_...")) // or ZAZU_API_KEY
+client, err := manza.New(manza.WithAPIKey("sk_live_...")) // or MANZA_API_KEY
 
 resp, err := client.Entity.Get(ctx)
-page, err := client.Accounts.List(ctx, zazu.AccountListParams{CurrencyCode: "MAD"})
-page, err = client.Customers.List(ctx, zazu.CustomerListParams{Query: "Acme"})
+page, err := client.Accounts.List(ctx, manza.AccountListParams{CurrencyCode: "MAD"})
+page, err = client.Customers.List(ctx, manza.CustomerListParams{Query: "Acme"})
 _, err = client.PaymentLinks.Cancel(ctx, id)
 
 // Transfer drafts (0.3.0): create, then answer the authorization webhook
-resp, err = client.TransferDrafts.Create(ctx, zazu.Attributes{"account_id": accountID, "amount": "10.0", "client_reference": "inv-42"})
-input := zazu.SignatureInput(zazu.TransferAuthorizationFields{ /* from YOUR own record */ })
-_, err = client.TransferDrafts.Authorize(ctx, draftID, authorizationID, zazu.Sign(secret, input))
+resp, err = client.TransferDrafts.Create(ctx, manza.Attributes{"account_id": accountID, "amount": "10.0", "client_reference": "inv-42"})
+input := manza.SignatureInput(manza.TransferAuthorizationFields{ /* from YOUR own record */ })
+_, err = client.TransferDrafts.Authorize(ctx, draftID, authorizationID, manza.Sign(secret, input))
 _, err = client.TransferDrafts.Decline(ctx, draftID, authorizationID, "wrong amount")
 
 // Beneficiaries, external accounts, payee trust (0.3.0)
 client.Beneficiaries.Create(ctx, attrs)
-client.Beneficiaries.ListExternalAccounts(ctx, beneficiaryID, zazu.ListParams{})
+client.Beneficiaries.ListExternalAccounts(ctx, beneficiaryID, manza.ListParams{})
 client.Beneficiaries.GetExternalAccount(ctx, beneficiaryID, id)
 client.Beneficiaries.CreateExternalAccount(ctx, beneficiaryID, attrs)
 client.PayeeTrustRequests.Create(ctx, []string{externalAccountID})
 
-// Errors: one *zazu.Error with a Kind, discriminate with errors.As
-var apiErr *zazu.Error
-if errors.As(err, &apiErr) && apiErr.Kind == zazu.KindConflict {
+// Errors: one *manza.Error with a Kind, discriminate with errors.As
+var apiErr *manza.Error
+if errors.As(err, &apiErr) && apiErr.Kind == manza.KindConflict {
     existing := apiErr.PaymentID // the draft already holding this client_reference
 }
 ```
 
 - Services on `Client`: `Accounts`, `Beneficiaries`, `CheckoutSessions`, `Customers`, `Entity`, `Invoices`, `PayeeTrustRequests`, `PaymentLinks`, `TransferDrafts`, `WebhookEndpoints`.
-- `zazu.Page` (`page.go`): cursor-based, hard cap `MaxPerPage` = 100; `Next(ctx)` returns nil on the last page.
-- `*zazu.Response` carries `Body` (snake_case `map[string]any`, as-is) and `Raw`. `Response.Decode` maps it onto the typed models in `types.go` (additive; `Body` is unchanged).
+- `manza.Page` (`page.go`): cursor-based, hard cap `MaxPerPage` = 100; `Next(ctx)` returns nil on the last page.
+- `*manza.Response` carries `Body` (snake_case `map[string]any`, as-is) and `Raw`. `Response.Decode` maps it onto the typed models in `types.go` (additive; `Body` is unchanged).
 - Errors: a single `*Error` with a `Kind` (`KindAuthentication`, `KindForbidden`, `KindNotFound`, `KindValidation` for 400 and 422, `KindConflict` for 409 with `PaymentID`, `KindRateLimit`, `KindServer`, `KindAPI`), plus `*ConfigurationError`, `*ConnectionError` and `*ArgumentError` (a value the SDK refuses to send, no HTTP made, e.g. a blank signature). Never match status codes.
 - Signer (`transfer_authorization.go`): `SignatureInput`, `Sign`, `PayeeFor`.
 - Snake-case wire format: bodies are returned as-is. **No auto-camelCasing.**
@@ -61,20 +61,20 @@ if errors.As(err, &apiErr) && apiErr.Kind == zazu.KindConflict {
 
 ## Critical rules
 
-- **Never call a live Zazu/Manza API.** Not from tests, scripts or Claude sessions. Tests replay zazu-ruby's cassettes against an `httptest.Server` only. Live staging calls create real transfers and approval requests for the team. Only zazu-ruby records cassettes.
+- **Never call a live Manza API.** Not from tests, scripts or Claude sessions. Tests replay manza-ruby's cassettes against an `httptest.Server` only. Live staging calls create real transfers and approval requests for the team. Only manza-ruby records cassettes.
 - **`gofmt -l .`, `go vet ./...` and `go test ./...` before every commit.** CI runs the same (`scripts/release-check` too).
 - **Cassette contract.**
-  - Cassettes come from the newest zazu-ruby `v*` release (`cassettes-vX.Y.Z.tar.gz`) via `scripts/fetch-cassettes.sh`, into `testdata/cassettes/`. They are recorded against `https://ma.manza.dev`; the harness fails any cassette whose URI is on another host (`replayHost`).
+  - Cassettes come from the manza-ruby release pinned in `scripts/fetch-cassettes.sh` (`PINNED_TAG`, `cassettes-vX.Y.Z.tar.gz`), not the newest one, into `testdata/cassettes/`. Request-body literals recorded in the cassettes (`zazu-ruby-fixture`, `Created by zazu-ruby fixture spec`, `zazu-fixture-success`) stay verbatim in `resources_test.go`: the body match is semantic, so renaming them breaks replay. They are recorded against `https://ma.manza.dev`; the harness fails any cassette whose URI is on another host (`replayHost`).
   - Load **one cassette per test** where two share method + URI: `transfer_drafts/authorize` vs `authorize_same_key`, and `create` vs `create_duplicate`. The server serves the first matching interaction.
   - The three `transfer_drafts/authorize*` cassettes match method + path + query + the JSON body minus `signature` (the recorded value is a scrubbed HMAC replay cannot reproduce).
   - Every other cassette matches method + path + query + **semantic JSON body** (`jsonEqual`: parsed and compared, not byte-for-byte, because Go sorts map keys). Bodies built from structs keep the recorded key order.
   - Cassette responses carry no `Content-Length`; `net/http` computes it. Don't add it.
-  - The `fixtureIDs` table in `cassette_test.go` must stay identical to zazu-ruby's `spec/support/fixture_ids.rb` (29 entries). Tests call `fixtureID(t, "ZAZU_FIXTURE_X")`.
-- **Hosts.** Default `https://ma.manza.finance`, South Africa `https://za.manza.finance`, staging and cassettes `https://ma.manza.dev`. Env var names stay `ZAZU_*` (`ZAZU_API_KEY`, `ZAZU_BASE_URL`, `ZAZU_API_VERSION`) and the package stays `zazu` until the rename plan (zazu-ruby `docs/plans/2026-10-manza-rename.md`).
-- **Error model is shared across the SDK family.** Adding an error class or `Kind` means coordinating zazu-ruby and zazu-ts at minimum. The 10th is the conflict (409). `Kind` string values are part of the contract.
-- **Signer.** `SignatureInput` and `Sign` must keep reproducing the two fixed vectors in `transfer_authorization_test.go`, the same vectors as zazu-ruby's `spec/zazu/transfer_authorization_spec.rb`. Never sign the server's `signature_input` blindly: build it from your own record of the transfer, and pass `amount` verbatim (`"2500.0"`).
-- **Release.** `bin/release` is byte-identical across the SDK repos and is never edited in place. Repo-specific logic lives in `scripts/version` (the `Version` constant in `client.go`) and `scripts/release-check`. `release.yml` gates on tag == `Version`. There is no registry token or trusted-publishing environment: a Go module's version is its git tag and the proxy indexes it. If a registry is ever added, its trusted-publisher binding must name `getmanza/zazu-go`.
-- **The repo lives at `getmanza/zazu-go`** (moved from `getzazu`). Remotes and URLs must say `getmanza`. Still stale and tracked for the rename plan: `scripts/fetch-cassettes.sh` (`REPO="getzazu/zazu-ruby"`), the module path in `go.mod` and `release.yml`, and README links.
+  - The `fixtureIDs` table in `cassette_test.go` must stay identical to manza-ruby's `spec/support/fixture_ids.rb` (29 entries). Tests call `fixtureID(t, "MANZA_FIXTURE_X")`.
+- **Hosts.** Default `https://ma.manza.finance`, South Africa `https://za.manza.finance`, staging and cassettes `https://ma.manza.dev`. Env vars are `MANZA_API_KEY`, `MANZA_BASE_URL` and `MANZA_API_VERSION` (`env.go`). The legacy `ZAZU_*` names are read as a fallback with a one-time stderr deprecation warning per variable, for all of 1.x; there is no timeout env var in this SDK. The request header is `Manza-Version`, the User-Agent `manza-go/<Version>`.
+- **Error model is shared across the SDK family.** Adding an error class or `Kind` means coordinating manza-ruby and manza-ts at minimum. The 10th is the conflict (409). `Kind` string values are part of the contract.
+- **Signer.** `SignatureInput` and `Sign` must keep reproducing the two fixed vectors in `transfer_authorization_test.go`, the same vectors as manza-ruby's `spec/manza/transfer_authorization_spec.rb`. Never sign the server's `signature_input` blindly: build it from your own record of the transfer, and pass `amount` verbatim (`"2500.0"`).
+- **Release.** `bin/release` is byte-identical across the SDK repos and is never edited in place. Repo-specific logic lives in `scripts/version` (the `Version` constant in `client.go`) and `scripts/release-check`. `release.yml` gates on tag == `Version`. There is no registry token or trusted-publishing environment: a Go module's version is its git tag and the proxy indexes it. If a registry is ever added, its trusted-publisher binding must name `getmanza/manza-go`.
+- **The repo lives at `getmanza/manza-go`** (renamed from `zazu-go`). Remotes and URLs must say `getmanza`; the module path is `github.com/getmanza/manza-go`.
 - **Never escape backticks in PR bodies.** With `<<'EOF'` (single-quoted heredoc) the shell passes everything through verbatim. Typing `` \` `` produces literal `` \` `` in the rendered PR. See "PR descriptions" below.
 
 ## PR descriptions
@@ -149,8 +149,8 @@ For multi-step tasks, state a brief plan with verification at each step.
 The exact steps from `.github/workflows/ci.yml`:
 
 ```bash
-# One-time setup (Go 1.24+), and again when zazu-ruby ships a new release
-scripts/fetch-cassettes.sh            # latest zazu-ruby v* tarball -> testdata/cassettes/
+# One-time setup (Go 1.24+), and again when manza-ruby ships a new release
+scripts/fetch-cassettes.sh            # pinned manza-ruby tarball (v1.0.0) -> testdata/cassettes/
 scripts/fetch-cassettes.sh v0.3.0     # or a specific tag
 
 # Daily loop
@@ -186,17 +186,17 @@ These live in `.claude/commands/` and are available in any Claude Code session:
 
 ## Cross-SDK contract
 
-zazu-ruby is the source of truth:
+manza-ruby is the source of truth:
 
 - It records cassettes against `https://ma.manza.dev` and ships them as a release tarball (`cassettes-vX.Y.Z.tar.gz`) on each version.
-- Every other SDK (zazu-ts, zazu-python, this one, ...) replays them in its own harness.
-- Cassettes always come from the **newest** zazu-ruby release, so a new Ruby release turns CI red here until this SDK catches up.
+- Every other SDK (manza-ts, manza-python, this one, ...) replays them in its own harness.
+- Cassettes come from the manza-ruby release **pinned** in `scripts/fetch-cassettes.sh`. Bump `PINNED_TAG` deliberately when this SDK is ready for a new Ruby release.
 
-If the contract breaks (new request shape, new error kind), it is a coordinated change across at least two repos: zazu-ruby and zazu-ts.
+If the contract breaks (new request shape, new error kind), it is a coordinated change across at least two repos: manza-ruby and manza-ts.
 
 ## Repository links
 
-- This repo: https://github.com/getmanza/zazu-go
-- Go package docs (module proxy, no registry): https://pkg.go.dev/github.com/getzazu/zazu-go
-- Reference implementation: https://github.com/getmanza/zazu-ruby
-- TypeScript SDK: https://github.com/getmanza/zazu-ts
+- This repo: https://github.com/getmanza/manza-go
+- Go package docs (module proxy, no registry): https://pkg.go.dev/github.com/getmanza/manza-go
+- Reference implementation: https://github.com/getmanza/manza-ruby
+- TypeScript SDK: https://github.com/getmanza/manza-ts

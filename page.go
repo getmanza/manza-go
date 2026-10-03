@@ -1,4 +1,4 @@
-package zazu
+package manza
 
 import (
 	"context"
@@ -42,7 +42,7 @@ func (c *Client) listPage(ctx context.Context, path string, base url.Values, par
 		limit = MaxPerPage
 	}
 	if limit < 0 || limit > MaxPerPage {
-		return nil, fmt.Errorf("zazu: limit must be between 1 and %d (got %d)", MaxPerPage, limit)
+		return nil, fmt.Errorf("manza: limit must be between 1 and %d (got %d)", MaxPerPage, limit)
 	}
 
 	var fetch func(ctx context.Context, cursor string) (*Page, error)

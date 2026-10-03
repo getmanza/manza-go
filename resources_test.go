@@ -1,6 +1,6 @@
-package zazu_test
+package manza_test
 
-// Mirror of zazu-ruby's spec/zazu/resources/*_spec.rb — same cassettes,
+// Mirror of manza-ruby's spec/manza/resources/*_spec.rb — same cassettes,
 // same assertions, per the cross-language SDK contract.
 
 import (
@@ -12,14 +12,14 @@ import (
 	"strings"
 	"testing"
 
-	zazu "github.com/getzazu/zazu-go"
+	manza "github.com/getmanza/manza-go"
 )
 
-func replayClient(t *testing.T, server *httptest.Server) *zazu.Client {
+func replayClient(t *testing.T, server *httptest.Server) *manza.Client {
 	t.Helper()
-	client, err := zazu.New(
-		zazu.WithAPIKey("test-api-key-for-replay"),
-		zazu.WithBaseURL(server.URL),
+	client, err := manza.New(
+		manza.WithAPIKey("test-api-key-for-replay"),
+		manza.WithBaseURL(server.URL),
 	)
 	if err != nil {
 		t.Fatalf("build client: %v", err)
@@ -45,7 +45,7 @@ func TestAccounts(t *testing.T) {
 	client := replayClient(t, server)
 	ctx := context.Background()
 
-	page, err := client.Accounts.List(ctx, zazu.AccountListParams{})
+	page, err := client.Accounts.List(ctx, manza.AccountListParams{})
 	if err != nil {
 		t.Fatalf("accounts list: %v", err)
 	}
@@ -53,16 +53,16 @@ func TestAccounts(t *testing.T) {
 		t.Fatal("expected data rows")
 	}
 
-	accountID := fixtureID(t, "ZAZU_FIXTURE_ACCOUNT_ID")
+	accountID := fixtureID(t, "MANZA_FIXTURE_ACCOUNT_ID")
 	if _, err := client.Accounts.Get(ctx, accountID); err != nil {
 		t.Fatalf("accounts get: %v", err)
 	}
 
-	if _, err := client.Accounts.ListTransactions(ctx, accountID, zazu.TransactionListParams{}); err != nil {
+	if _, err := client.Accounts.ListTransactions(ctx, accountID, manza.TransactionListParams{}); err != nil {
 		t.Fatalf("list transactions: %v", err)
 	}
 
-	txID := fixtureID(t, "ZAZU_FIXTURE_TRANSACTION_ID")
+	txID := fixtureID(t, "MANZA_FIXTURE_TRANSACTION_ID")
 	if _, err := client.Accounts.GetTransaction(ctx, accountID, txID); err != nil {
 		t.Fatalf("get transaction: %v", err)
 	}
@@ -73,11 +73,11 @@ func TestCustomers(t *testing.T) {
 	client := replayClient(t, server)
 	ctx := context.Background()
 
-	if _, err := client.Customers.List(ctx, zazu.CustomerListParams{}); err != nil {
+	if _, err := client.Customers.List(ctx, manza.CustomerListParams{}); err != nil {
 		t.Fatalf("customers list: %v", err)
 	}
 
-	customerID := fixtureID(t, "ZAZU_FIXTURE_CUSTOMER_ID")
+	customerID := fixtureID(t, "MANZA_FIXTURE_CUSTOMER_ID")
 	resp, err := client.Customers.Get(ctx, customerID)
 	if err != nil {
 		t.Fatalf("customers get: %v", err)
@@ -92,7 +92,7 @@ func TestInvoices(t *testing.T) {
 	client := replayClient(t, server)
 	ctx := context.Background()
 
-	page, err := client.Invoices.List(ctx, zazu.InvoiceListParams{})
+	page, err := client.Invoices.List(ctx, manza.InvoiceListParams{})
 	if err != nil {
 		t.Fatalf("invoices list: %v", err)
 	}
@@ -100,7 +100,7 @@ func TestInvoices(t *testing.T) {
 		t.Fatal("expected data rows")
 	}
 
-	invoiceID := fixtureID(t, "ZAZU_FIXTURE_INVOICE_ID")
+	invoiceID := fixtureID(t, "MANZA_FIXTURE_INVOICE_ID")
 	if _, err := client.Invoices.Get(ctx, invoiceID); err != nil {
 		t.Fatalf("invoices get: %v", err)
 	}
@@ -111,12 +111,12 @@ func TestPaymentLinks(t *testing.T) {
 	client := replayClient(t, server)
 	ctx := context.Background()
 
-	if _, err := client.PaymentLinks.List(ctx, zazu.PaymentLinkListParams{}); err != nil {
+	if _, err := client.PaymentLinks.List(ctx, manza.PaymentLinkListParams{}); err != nil {
 		t.Fatalf("payment links list: %v", err)
 	}
 
-	resp, err := client.PaymentLinks.Create(ctx, zazu.Attributes{
-		"account_id":  fixtureID(t, "ZAZU_FIXTURE_ACCOUNT_ID"),
+	resp, err := client.PaymentLinks.Create(ctx, manza.Attributes{
+		"account_id":  fixtureID(t, "MANZA_FIXTURE_ACCOUNT_ID"),
 		"amount":      "100.00",
 		"title":       "SDK fixture",
 		"description": "Created by zazu-ruby fixture spec",
@@ -129,7 +129,7 @@ func TestPaymentLinks(t *testing.T) {
 		t.Fatalf("expected 201, got %d", resp.Status)
 	}
 
-	if _, err := client.PaymentLinks.Cancel(ctx, fixtureID(t, "ZAZU_FIXTURE_CANCELLABLE_PAYMENT_LINK_ID")); err != nil {
+	if _, err := client.PaymentLinks.Cancel(ctx, fixtureID(t, "MANZA_FIXTURE_CANCELLABLE_PAYMENT_LINK_ID")); err != nil {
 		t.Fatalf("payment links cancel: %v", err)
 	}
 }
@@ -138,15 +138,15 @@ func TestCheckoutSessions(t *testing.T) {
 	server := startReplayServer(t, "checkout_sessions/get")
 	client := replayClient(t, server)
 
-	resp, err := client.CheckoutSessions.Get(context.Background(), fixtureID(t, "ZAZU_FIXTURE_CHECKOUT_SESSION_ID"))
+	resp, err := client.CheckoutSessions.Get(context.Background(), fixtureID(t, "MANZA_FIXTURE_CHECKOUT_SESSION_ID"))
 	if err != nil {
 		t.Fatalf("checkout sessions get: %v", err)
 	}
-	var session zazu.CheckoutSession
+	var session manza.CheckoutSession
 	if err := resp.Decode(&session); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if session.ID != fixtureID(t, "ZAZU_FIXTURE_CHECKOUT_SESSION_ID") || session.Status != "open" {
+	if session.ID != fixtureID(t, "MANZA_FIXTURE_CHECKOUT_SESSION_ID") || session.Status != "open" {
 		t.Fatalf("unexpected session %#v", session)
 	}
 	if session.SettledAt != nil || session.Transaction != nil || session.CustomerName != nil || session.CollectBillingAddress != nil {
@@ -161,8 +161,8 @@ func TestCheckoutSessionsCreate(t *testing.T) {
 	server := startReplayServer(t, "checkout_sessions/create")
 	client := replayClient(t, server)
 
-	resp, err := client.CheckoutSessions.Create(context.Background(), zazu.Attributes{
-		"account_id":     fixtureID(t, "ZAZU_FIXTURE_ACCOUNT_ID"),
+	resp, err := client.CheckoutSessions.Create(context.Background(), manza.Attributes{
+		"account_id":     fixtureID(t, "MANZA_FIXTURE_ACCOUNT_ID"),
 		"amount":         "100.00",
 		"success_url":    "https://example.com/zazu-fixture-success?session_id={CHECKOUT_SESSION_ID}",
 		"cancel_url":     "https://example.com/zazu-fixture-cancel",
@@ -189,10 +189,10 @@ func TestWebhookEndpoints(t *testing.T) {
 	client := replayClient(t, server)
 	ctx := context.Background()
 
-	if _, err := client.WebhookEndpoints.List(ctx, zazu.ListParams{}); err != nil {
+	if _, err := client.WebhookEndpoints.List(ctx, manza.ListParams{}); err != nil {
 		t.Fatalf("webhook endpoints list: %v", err)
 	}
-	if _, err := client.WebhookEndpoints.Get(ctx, fixtureID(t, "ZAZU_FIXTURE_WEBHOOK_ID")); err != nil {
+	if _, err := client.WebhookEndpoints.Get(ctx, fixtureID(t, "MANZA_FIXTURE_WEBHOOK_ID")); err != nil {
 		t.Fatalf("webhook endpoints get: %v", err)
 	}
 }
@@ -201,12 +201,12 @@ func TestTransferDraftsCreate(t *testing.T) {
 	server := startReplayServer(t, "transfer_drafts/create")
 	client := replayClient(t, server)
 
-	resp, err := client.TransferDrafts.Create(context.Background(), zazu.Attributes{
-		"account_id":        fixtureID(t, "ZAZU_FIXTURE_ACCOUNT_ID"),
-		"beneficiary_id":    fixtureID(t, "ZAZU_FIXTURE_BENEFICIARY_ID"),
+	resp, err := client.TransferDrafts.Create(context.Background(), manza.Attributes{
+		"account_id":        fixtureID(t, "MANZA_FIXTURE_ACCOUNT_ID"),
+		"beneficiary_id":    fixtureID(t, "MANZA_FIXTURE_BENEFICIARY_ID"),
 		"amount":            "150.00",
 		"payment_reference": "SDK fixture",
-		"client_reference":  fixtureID(t, "ZAZU_FIXTURE_CLIENT_REFERENCE"),
+		"client_reference":  fixtureID(t, "MANZA_FIXTURE_CLIENT_REFERENCE"),
 	})
 	if err != nil {
 		t.Fatalf("transfer drafts create: %v", err)
@@ -217,7 +217,7 @@ func TestTransferDraftsCreate(t *testing.T) {
 	if status, _ := resp.Body["status"].(string); status != "requested" {
 		t.Fatalf("expected requested status, got %q", status)
 	}
-	if ref, _ := resp.Body["client_reference"].(string); ref != fixtureID(t, "ZAZU_FIXTURE_CLIENT_REFERENCE") {
+	if ref, _ := resp.Body["client_reference"].(string); ref != fixtureID(t, "MANZA_FIXTURE_CLIENT_REFERENCE") {
 		t.Fatalf("expected client_reference echoed, got %q", ref)
 	}
 	if _, ok := resp.Body["authorization"]; !ok {
@@ -232,23 +232,23 @@ func TestTransferDraftsCreateDuplicate(t *testing.T) {
 	server := startReplayServer(t, "transfer_drafts/create_duplicate")
 	client := replayClient(t, server)
 
-	_, err := client.TransferDrafts.Create(context.Background(), zazu.Attributes{
-		"account_id":       fixtureID(t, "ZAZU_FIXTURE_ACCOUNT_ID"),
-		"beneficiary_id":   fixtureID(t, "ZAZU_FIXTURE_BENEFICIARY_ID"),
+	_, err := client.TransferDrafts.Create(context.Background(), manza.Attributes{
+		"account_id":       fixtureID(t, "MANZA_FIXTURE_ACCOUNT_ID"),
+		"beneficiary_id":   fixtureID(t, "MANZA_FIXTURE_BENEFICIARY_ID"),
 		"amount":           "10.00",
-		"client_reference": fixtureID(t, "ZAZU_FIXTURE_AUTHORIZABLE_CLIENT_REFERENCE"),
+		"client_reference": fixtureID(t, "MANZA_FIXTURE_AUTHORIZABLE_CLIENT_REFERENCE"),
 	})
-	var apiErr *zazu.Error
+	var apiErr *manza.Error
 	if !errors.As(err, &apiErr) {
-		t.Fatalf("expected *zazu.Error, got %T (%v)", err, err)
+		t.Fatalf("expected *manza.Error, got %T (%v)", err, err)
 	}
-	if apiErr.Kind != zazu.KindConflict || apiErr.Status != 409 {
+	if apiErr.Kind != manza.KindConflict || apiErr.Status != 409 {
 		t.Fatalf("expected conflict/409, got %s/%d", apiErr.Kind, apiErr.Status)
 	}
 	if apiErr.Type != "duplicate_client_reference" {
 		t.Fatalf("expected duplicate_client_reference, got %q", apiErr.Type)
 	}
-	if want := fixtureID(t, "ZAZU_FIXTURE_AUTHORIZABLE_DRAFT_ID"); apiErr.PaymentID != want {
+	if want := fixtureID(t, "MANZA_FIXTURE_AUTHORIZABLE_DRAFT_ID"); apiErr.PaymentID != want {
 		t.Fatalf("expected payment_id %q, got %q", want, apiErr.PaymentID)
 	}
 }
@@ -257,7 +257,7 @@ func TestTransferDraftsGet(t *testing.T) {
 	server := startReplayServer(t, "transfer_drafts/get")
 	client := replayClient(t, server)
 
-	got, err := client.TransferDrafts.Get(context.Background(), fixtureID(t, "ZAZU_FIXTURE_TRANSFER_DRAFT_ID"))
+	got, err := client.TransferDrafts.Get(context.Background(), fixtureID(t, "MANZA_FIXTURE_TRANSFER_DRAFT_ID"))
 	if err != nil {
 		t.Fatalf("transfer drafts get: %v", err)
 	}
@@ -271,15 +271,15 @@ func TestTransferDraftsGet(t *testing.T) {
 
 func TestTransferDraftsAuthorizeBlankSignature(t *testing.T) {
 	// No server: a blank signature must fail before any HTTP call.
-	client, err := zazu.New(zazu.WithAPIKey("test"), zazu.WithBaseURL("http://127.0.0.1:1"))
+	client, err := manza.New(manza.WithAPIKey("test"), manza.WithBaseURL("http://127.0.0.1:1"))
 	if err != nil {
 		t.Fatalf("build client: %v", err)
 	}
 	for _, signature := range []string{"", "   "} {
 		_, err := client.TransferDrafts.Authorize(context.Background(), "draft", "auth", signature)
-		var argErr *zazu.ArgumentError
+		var argErr *manza.ArgumentError
 		if !errors.As(err, &argErr) {
-			t.Fatalf("signature %q: expected *zazu.ArgumentError, got %T (%v)", signature, err, err)
+			t.Fatalf("signature %q: expected *manza.ArgumentError, got %T (%v)", signature, err, err)
 		}
 	}
 }
@@ -289,14 +289,14 @@ func TestTransferDraftsAuthorizeBadSignature(t *testing.T) {
 	client := replayClient(t, server)
 
 	_, err := client.TransferDrafts.Authorize(context.Background(),
-		fixtureID(t, "ZAZU_FIXTURE_BAD_SIGNATURE_DRAFT_ID"),
-		fixtureID(t, "ZAZU_FIXTURE_BAD_SIGNATURE_AUTHORIZATION_ID"),
+		fixtureID(t, "MANZA_FIXTURE_BAD_SIGNATURE_DRAFT_ID"),
+		fixtureID(t, "MANZA_FIXTURE_BAD_SIGNATURE_AUTHORIZATION_ID"),
 		strings.Repeat("0", 64))
-	var apiErr *zazu.Error
+	var apiErr *manza.Error
 	if !errors.As(err, &apiErr) {
-		t.Fatalf("expected *zazu.Error, got %T (%v)", err, err)
+		t.Fatalf("expected *manza.Error, got %T (%v)", err, err)
 	}
-	if apiErr.Kind != zazu.KindValidation || apiErr.Type != "invalid_signature" {
+	if apiErr.Kind != manza.KindValidation || apiErr.Type != "invalid_signature" {
 		t.Fatalf("expected validation/invalid_signature, got %s/%s", apiErr.Kind, apiErr.Type)
 	}
 }
@@ -306,14 +306,14 @@ func TestTransferDraftsAuthorizeSameKey(t *testing.T) {
 	client := replayClient(t, server)
 
 	_, err := client.TransferDrafts.Authorize(context.Background(),
-		fixtureID(t, "ZAZU_FIXTURE_AUTHORIZABLE_DRAFT_ID"),
-		fixtureID(t, "ZAZU_FIXTURE_AUTHORIZABLE_AUTHORIZATION_ID"),
+		fixtureID(t, "MANZA_FIXTURE_AUTHORIZABLE_DRAFT_ID"),
+		fixtureID(t, "MANZA_FIXTURE_AUTHORIZABLE_AUTHORIZATION_ID"),
 		strings.Repeat("0", 64))
-	var apiErr *zazu.Error
+	var apiErr *manza.Error
 	if !errors.As(err, &apiErr) {
-		t.Fatalf("expected *zazu.Error, got %T (%v)", err, err)
+		t.Fatalf("expected *manza.Error, got %T (%v)", err, err)
 	}
-	if apiErr.Kind != zazu.KindForbidden || apiErr.Type != "same_key_forbidden" {
+	if apiErr.Kind != manza.KindForbidden || apiErr.Type != "same_key_forbidden" {
 		t.Fatalf("expected forbidden/same_key_forbidden, got %s/%s", apiErr.Kind, apiErr.Type)
 	}
 }
@@ -322,31 +322,31 @@ func TestTransferDraftsAuthorize(t *testing.T) {
 	server := startReplayServer(t, "transfer_drafts/authorize")
 	client := replayClient(t, server)
 
-	draftID := fixtureID(t, "ZAZU_FIXTURE_AUTHORIZABLE_DRAFT_ID")
-	payee, err := zazu.PayeeFor(fixtureID(t, "ZAZU_FIXTURE_TRUSTED_EXTERNAL_ACCOUNT_ID"), "")
+	draftID := fixtureID(t, "MANZA_FIXTURE_AUTHORIZABLE_DRAFT_ID")
+	payee, err := manza.PayeeFor(fixtureID(t, "MANZA_FIXTURE_TRUSTED_EXTERNAL_ACCOUNT_ID"), "")
 	if err != nil {
 		t.Fatalf("payee: %v", err)
 	}
-	input := zazu.SignatureInput(zazu.TransferAuthorizationFields{
+	input := manza.SignatureInput(manza.TransferAuthorizationFields{
 		PaymentID:       draftID,
-		Nonce:           fixtureID(t, "ZAZU_FIXTURE_AUTHORIZABLE_NONCE"),
+		Nonce:           fixtureID(t, "MANZA_FIXTURE_AUTHORIZABLE_NONCE"),
 		Amount:          "10.0",
 		CurrencyCode:    "MAD",
-		AccountID:       fixtureID(t, "ZAZU_FIXTURE_ACCOUNT_ID"),
+		AccountID:       fixtureID(t, "MANZA_FIXTURE_ACCOUNT_ID"),
 		Payee:           payee,
-		ClientReference: fixtureID(t, "ZAZU_FIXTURE_AUTHORIZABLE_CLIENT_REFERENCE"),
+		ClientReference: fixtureID(t, "MANZA_FIXTURE_AUTHORIZABLE_CLIENT_REFERENCE"),
 	})
 
 	resp, err := client.TransferDrafts.Authorize(context.Background(), draftID,
-		fixtureID(t, "ZAZU_FIXTURE_AUTHORIZABLE_AUTHORIZATION_ID"),
-		zazu.Sign("replay-secret", input))
+		fixtureID(t, "MANZA_FIXTURE_AUTHORIZABLE_AUTHORIZATION_ID"),
+		manza.Sign("replay-secret", input))
 	if err != nil {
 		t.Fatalf("authorize: %v", err)
 	}
 	if resp.Status != 200 {
 		t.Fatalf("expected 200, got %d", resp.Status)
 	}
-	var draft zazu.TransferDraft
+	var draft manza.TransferDraft
 	if err := resp.Decode(&draft); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -366,8 +366,8 @@ func TestTransferDraftsDecline(t *testing.T) {
 	client := replayClient(t, server)
 
 	resp, err := client.TransferDrafts.Decline(context.Background(),
-		fixtureID(t, "ZAZU_FIXTURE_DECLINABLE_DRAFT_ID"),
-		fixtureID(t, "ZAZU_FIXTURE_DECLINABLE_AUTHORIZATION_ID"),
+		fixtureID(t, "MANZA_FIXTURE_DECLINABLE_DRAFT_ID"),
+		fixtureID(t, "MANZA_FIXTURE_DECLINABLE_AUTHORIZATION_ID"),
 		"SDK fixture")
 	if err != nil {
 		t.Fatalf("decline: %v", err)
@@ -375,11 +375,11 @@ func TestTransferDraftsDecline(t *testing.T) {
 	if resp.Status != 200 {
 		t.Fatalf("expected 200, got %d", resp.Status)
 	}
-	var authorization zazu.Authorization
+	var authorization manza.Authorization
 	if err := resp.Decode(&authorization); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if authorization.ID != fixtureID(t, "ZAZU_FIXTURE_DECLINABLE_AUTHORIZATION_ID") || authorization.Status != "declined" {
+	if authorization.ID != fixtureID(t, "MANZA_FIXTURE_DECLINABLE_AUTHORIZATION_ID") || authorization.Status != "declined" {
 		t.Fatalf("unexpected authorization %#v", authorization)
 	}
 	if authorization.DeclinedAt == nil || authorization.AuthorizedAt != nil {
@@ -410,7 +410,7 @@ func TestBeneficiaries(t *testing.T) {
 	client := replayClient(t, server)
 	ctx := context.Background()
 
-	page, err := client.Beneficiaries.List(ctx, zazu.ListParams{})
+	page, err := client.Beneficiaries.List(ctx, manza.ListParams{})
 	if err != nil {
 		t.Fatalf("beneficiaries list: %v", err)
 	}
@@ -421,7 +421,7 @@ func TestBeneficiaries(t *testing.T) {
 		t.Fatalf("expected embedded external_accounts, got %#v", page.Data[0]["external_accounts"])
 	}
 
-	resp, err := client.Beneficiaries.Get(ctx, fixtureID(t, "ZAZU_FIXTURE_BENEFICIARY_ID"))
+	resp, err := client.Beneficiaries.Get(ctx, fixtureID(t, "MANZA_FIXTURE_BENEFICIARY_ID"))
 	if err != nil {
 		t.Fatalf("beneficiaries get: %v", err)
 	}
@@ -434,7 +434,7 @@ func TestBeneficiariesCreate(t *testing.T) {
 	server := startReplayServer(t, "beneficiaries/create")
 	client := replayClient(t, server)
 
-	resp, err := client.Beneficiaries.Create(context.Background(), zazu.Attributes{
+	resp, err := client.Beneficiaries.Create(context.Background(), manza.Attributes{
 		"beneficiary_type": "business",
 		"company_name":     "Zazu Fixture Beneficiary - spec (zazu-ruby-fixture)",
 		"email":            "fixture-beneficiary-spec@example.com",
@@ -445,11 +445,11 @@ func TestBeneficiariesCreate(t *testing.T) {
 	if resp.Status != 201 {
 		t.Fatalf("expected 201, got %d", resp.Status)
 	}
-	var beneficiary zazu.Beneficiary
+	var beneficiary manza.Beneficiary
 	if err := resp.Decode(&beneficiary); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if beneficiary.BeneficiaryType != zazu.BeneficiaryTypeBusiness {
+	if beneficiary.BeneficiaryType != manza.BeneficiaryTypeBusiness {
 		t.Fatalf("expected business, got %q", beneficiary.BeneficiaryType)
 	}
 	if beneficiary.ExternalAccounts == nil || len(beneficiary.ExternalAccounts) != 0 {
@@ -462,7 +462,7 @@ func TestBeneficiariesListExternalAccounts(t *testing.T) {
 	client := replayClient(t, server)
 
 	page, err := client.Beneficiaries.ListExternalAccounts(context.Background(),
-		fixtureID(t, "ZAZU_FIXTURE_CREATED_BENEFICIARY_ID"), zazu.ListParams{})
+		fixtureID(t, "MANZA_FIXTURE_CREATED_BENEFICIARY_ID"), manza.ListParams{})
 	if err != nil {
 		t.Fatalf("list external accounts: %v", err)
 	}
@@ -472,7 +472,7 @@ func TestBeneficiariesListExternalAccounts(t *testing.T) {
 	if len(page.Data) != 1 {
 		t.Fatalf("expected one row, got %d", len(page.Data))
 	}
-	if id, _ := page.Data[0]["id"].(string); id != fixtureID(t, "ZAZU_FIXTURE_EXTERNAL_ACCOUNT_ID") {
+	if id, _ := page.Data[0]["id"].(string); id != fixtureID(t, "MANZA_FIXTURE_EXTERNAL_ACCOUNT_ID") {
 		t.Fatalf("unexpected id %q", id)
 	}
 	if _, ok := page.Data[0]["account_number"].(string); !ok {
@@ -485,15 +485,15 @@ func TestBeneficiariesGetExternalAccount(t *testing.T) {
 	client := replayClient(t, server)
 
 	resp, err := client.Beneficiaries.GetExternalAccount(context.Background(),
-		fixtureID(t, "ZAZU_FIXTURE_CREATED_BENEFICIARY_ID"), fixtureID(t, "ZAZU_FIXTURE_EXTERNAL_ACCOUNT_ID"))
+		fixtureID(t, "MANZA_FIXTURE_CREATED_BENEFICIARY_ID"), fixtureID(t, "MANZA_FIXTURE_EXTERNAL_ACCOUNT_ID"))
 	if err != nil {
 		t.Fatalf("get external account: %v", err)
 	}
-	var account zazu.ExternalAccount
+	var account manza.ExternalAccount
 	if err := resp.Decode(&account); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if account.ID != fixtureID(t, "ZAZU_FIXTURE_EXTERNAL_ACCOUNT_ID") {
+	if account.ID != fixtureID(t, "MANZA_FIXTURE_EXTERNAL_ACCOUNT_ID") {
 		t.Fatalf("unexpected id %q", account.ID)
 	}
 	if _, ok := resp.Body["default"]; !ok {
@@ -506,8 +506,8 @@ func TestBeneficiariesCreateExternalAccount(t *testing.T) {
 	client := replayClient(t, server)
 
 	resp, err := client.Beneficiaries.CreateExternalAccount(context.Background(),
-		fixtureID(t, "ZAZU_FIXTURE_CREATED_BENEFICIARY_ID"), zazu.Attributes{
-			"account_number": fixtureID(t, "ZAZU_FIXTURE_NEW_ACCOUNT_NUMBER"),
+		fixtureID(t, "MANZA_FIXTURE_CREATED_BENEFICIARY_ID"), manza.Attributes{
+			"account_number": fixtureID(t, "MANZA_FIXTURE_NEW_ACCOUNT_NUMBER"),
 			"name":           "Fixture Secondary Account",
 		})
 	if err != nil {
@@ -516,7 +516,7 @@ func TestBeneficiariesCreateExternalAccount(t *testing.T) {
 	if resp.Status != 201 {
 		t.Fatalf("expected 201, got %d", resp.Status)
 	}
-	var account zazu.ExternalAccount
+	var account manza.ExternalAccount
 	if err := resp.Decode(&account); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -530,7 +530,7 @@ func TestPayeeTrustRequests(t *testing.T) {
 	client := replayClient(t, server)
 	ctx := context.Background()
 
-	externalAccountID := fixtureID(t, "ZAZU_FIXTURE_EXTERNAL_ACCOUNT_ID")
+	externalAccountID := fixtureID(t, "MANZA_FIXTURE_EXTERNAL_ACCOUNT_ID")
 	resp, err := client.PayeeTrustRequests.Create(ctx, []string{externalAccountID})
 	if err != nil {
 		t.Fatalf("payee trust requests create: %v", err)
@@ -538,7 +538,7 @@ func TestPayeeTrustRequests(t *testing.T) {
 	if resp.Status != 201 {
 		t.Fatalf("expected 201, got %d", resp.Status)
 	}
-	var created zazu.PayeeTrustRequest
+	var created manza.PayeeTrustRequest
 	if err := resp.Decode(&created); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -546,12 +546,12 @@ func TestPayeeTrustRequests(t *testing.T) {
 		t.Fatalf("unexpected trust request %#v", created)
 	}
 
-	id := fixtureID(t, "ZAZU_FIXTURE_PAYEE_TRUST_REQUEST_ID")
+	id := fixtureID(t, "MANZA_FIXTURE_PAYEE_TRUST_REQUEST_ID")
 	got, err := client.PayeeTrustRequests.Get(ctx, id)
 	if err != nil {
 		t.Fatalf("payee trust requests get: %v", err)
 	}
-	var fetched zazu.PayeeTrustRequest
+	var fetched manza.PayeeTrustRequest
 	if err := got.Decode(&fetched); err != nil {
 		t.Fatalf("decode: %v", err)
 	}

@@ -28,17 +28,17 @@ page, err = client.Customers.List(ctx, manza.CustomerListParams{Query: "Acme"})
 _, err = client.PaymentLinks.Cancel(ctx, id)
 
 // Transfer drafts (0.3.0): create, then answer the authorization webhook
-resp, err = client.TransferDrafts.Create(ctx, manza.Attributes{"account_id": accountID, "amount": "10.0", "client_reference": "inv-42"})
+resp, err = client.TransferDrafts.Create(ctx, manza.Attributes{"account_id": accountID, "beneficiary_id": beneficiaryID, "amount": "10.0", "client_reference": "inv-42"})
 input := manza.SignatureInput(manza.TransferAuthorizationFields{ /* from YOUR own record */ })
 _, err = client.TransferDrafts.Authorize(ctx, draftID, authorizationID, manza.Sign(secret, input))
 _, err = client.TransferDrafts.Decline(ctx, draftID, authorizationID, "wrong amount")
 
 // Beneficiaries, external accounts, payee trust (0.3.0)
-client.Beneficiaries.Create(ctx, attrs)
-client.Beneficiaries.ListExternalAccounts(ctx, beneficiaryID, manza.ListParams{})
-client.Beneficiaries.GetExternalAccount(ctx, beneficiaryID, id)
-client.Beneficiaries.CreateExternalAccount(ctx, beneficiaryID, attrs)
-client.PayeeTrustRequests.Create(ctx, []string{externalAccountID})
+_, err = client.Beneficiaries.Create(ctx, attrs)
+_, err = client.Beneficiaries.ListExternalAccounts(ctx, beneficiaryID, manza.ListParams{})
+_, err = client.Beneficiaries.GetExternalAccount(ctx, beneficiaryID, id)
+_, err = client.Beneficiaries.CreateExternalAccount(ctx, beneficiaryID, attrs)
+_, err = client.PayeeTrustRequests.Create(ctx, []string{externalAccountID})
 
 // Errors: one *manza.Error with a Kind, discriminate with errors.As
 var apiErr *manza.Error
@@ -75,9 +75,9 @@ if errors.As(err, &apiErr) && apiErr.Kind == manza.KindConflict {
 - **Replay failures.** `no cassette interaction matches` means the request drifted: fix the SDK's request, never loosen the matcher, skip the test (`t.Skip`) or edit a cassette. A genuinely new request shape is re-recorded in manza-ruby first. Check a drifted `fixtureIDs` entry and two cassettes loaded in one test before anything else. A cassette-fetch failure is the pinned release or its tarball missing, or a transient 5xx (the script retries).
 - **Errors and types.** Return errors, never discard one with `_ =`; fix the producer instead of hiding a wrong shape behind a `.(string)` assertion. A public API break is made only on purpose, named in the changelog and released as a major version.
 - **Hosts.** Default `https://ma.manza.finance`, South Africa `https://za.manza.finance`, staging and cassettes `https://ma.manza.dev`. Env vars are `MANZA_API_KEY`, `MANZA_BASE_URL` and `MANZA_API_VERSION` (`env.go`). The legacy `ZAZU_*` names are read as a fallback with a one-time stderr deprecation warning per variable, for all of 1.x; there is no timeout env var in this SDK. The request header is `Manza-Version`, the User-Agent `manza-go/<Version>`.
-- **Error model is shared across the SDK family.** Adding an error class or `Kind` means coordinating manza-ruby and manza-ts at minimum. The 10th is the conflict (409). `Kind` string values are part of the contract.
+- **Error model is shared across the SDK family.** Adding an error class or `Kind` means coordinating manza-ruby and manza-ts at minimum. `KindConflict` represents 409 responses. `Kind` string values are part of the contract.
 - **Signer.** `SignatureInput` and `Sign` must keep reproducing the two fixed vectors in `transfer_authorization_test.go`, the same vectors as manza-ruby's `spec/manza/transfer_authorization_spec.rb`. Never sign the server's `signature_input` blindly: build it from your own record of the transfer, and pass `amount` verbatim (`"2500.0"`).
-- **Release.** `bin/release` is byte-identical across the SDK repos and is never edited in place. A tag made by hand skips `scripts/version` and fails `release.yml`'s tag == `Version` gate: delete it and release through `bin/release`. Repo-specific logic lives in `scripts/version` (the `Version` constant in `client.go`) and `scripts/release-check`. `release.yml` gates on tag == `Version`. There is no registry token or trusted-publishing environment: a Go module's version is its git tag and the proxy indexes it. If a registry is ever added, its trusted-publisher binding must name `getmanza/manza-go`.
+- **Release.** `bin/release` is byte-identical across the SDK repos and is never edited in place. A tag whose version differs from `Version` in `client.go` fails `release.yml`'s tag == `Version` gate, so a new version always goes through `bin/release` (it updates `Version` via `scripts/version`). Repo-specific logic lives in `scripts/version` (the `Version` constant in `client.go`) and `scripts/release-check`. `release.yml` gates on tag == `Version`. There is no registry token or trusted-publishing environment: a Go module's version is its git tag and the proxy indexes it. If a registry is ever added, its trusted-publisher binding must name `getmanza/manza-go`.
 - **The repo lives at `getmanza/manza-go`** (renamed from `zazu-go`). Remotes and URLs must say `getmanza`; the module path is `github.com/getmanza/manza-go`.
 - **Never escape backticks in PR bodies.** With `<<'EOF'` (single-quoted heredoc) the shell passes everything through verbatim. Typing `` \` `` produces literal `` \` `` in the rendered PR. See "PR descriptions" below.
 

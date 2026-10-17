@@ -5,7 +5,7 @@
   "extraKnownMarketplaces": {
     "zoolutions": {
       "source": { "source": "github", "repo": "zoolutions/claude-plugins" },
-      "autoUpdate": false
+      "autoUpdate": true
     }
   },
   "enabledPlugins": { "flow@zoolutions": true }

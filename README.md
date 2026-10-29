@@ -138,10 +138,10 @@ func handle(w http.ResponseWriter, r *http.Request) {
         http.Error(w, err.Error(), http.StatusUnauthorized)
         return
     }
+    w.WriteHeader(http.StatusOK) // respond first: the delivery has a timeout
     if event["event"] == "payment.authorization_requested" {
-        // answer it (see below), after responding 200
+        go answer(event) // check your ledger, sign and authorize (see below)
     }
-    w.WriteHeader(http.StatusOK)
 }
 ```
 

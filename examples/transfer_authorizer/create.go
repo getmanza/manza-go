@@ -35,6 +35,12 @@ func CreateTransfer(ctx context.Context, creator *manza.Client, ledger *Ledger, 
 		return fmt.Errorf("create failed for client_reference %s: %s", t.ClientReference, describeError(err))
 	}
 	payment := resp.Body
+	for _, field := range []string{"id", "amount", "currency_code", "account_id"} {
+		if str(payment[field]) == "" {
+			return fmt.Errorf("the create response for client_reference %s has no %s, so it was not written to the "+
+				"ledger: look for that client_reference among your approvers' payments before rerunning", t.ClientReference, field)
+		}
+	}
 
 	destination := str(payment["destination_account_id"])
 	external := str(payment["external_account_id"])

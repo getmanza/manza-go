@@ -54,7 +54,9 @@ func main() {
 	if port == "" {
 		port = "4599"
 	}
-	app.Logger.Printf("INFO listening on :%s (ALLOW_NEW_PAYEES=%t)", port, allowNewPayees)
-	server := &http.Server{Addr: ":" + port, Handler: app, ReadHeaderTimeout: 10 * time.Second}
+	app.Logger.Printf("INFO listening on 127.0.0.1:%s (ALLOW_NEW_PAYEES=%t)", port, allowNewPayees)
+	// Localhost only: the tunnel forwards to it, nothing else needs to reach
+	// the process holding key B. ReadTimeout bounds a slowly streamed body.
+	server := &http.Server{Addr: "127.0.0.1:" + port, Handler: app, ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second}
 	log.Fatal(server.ListenAndServe())
 }

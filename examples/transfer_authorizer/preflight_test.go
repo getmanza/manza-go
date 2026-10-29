@@ -349,6 +349,14 @@ func TestPreflightWarnsThatANewPayeeNeedsTheToggle(t *testing.T) {
 	}
 }
 
+func TestPreflightReportsAnExternalAccountsFieldThatIsNotAList(t *testing.T) {
+	stub := newPreflightStub()
+	stub.overrides["/api/beneficiaries/"+beneficiaryID] = stubResponse{status: 200, body: `{"id":"b","external_accounts":"x"}`}
+	_, output := stub.run(t, "10.00")
+
+	expectFirstFailure(t, output, "external_accounts is not a list")
+}
+
 func TestPreflightFailsWhenTheBeneficiaryHasNoDefaultBankAccount(t *testing.T) {
 	stub := newPreflightStub()
 	stub.payee["default"] = false

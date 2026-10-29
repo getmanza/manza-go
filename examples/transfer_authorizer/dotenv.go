@@ -38,6 +38,8 @@ func LoadDotenv(path string) error {
 			if end := strings.IndexByte(value[1:], value[0]); end >= 0 {
 				value = value[1 : end+1]
 			}
+		} else if strings.HasPrefix(value, "#") { // KEY= # a note: empty
+			value = ""
 		} else if i := strings.Index(value, " #"); i >= 0 {
 			value = strings.TrimSpace(value[:i])
 		}

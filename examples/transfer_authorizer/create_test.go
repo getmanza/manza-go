@@ -97,3 +97,14 @@ func TestCreateTransferWarnsWhenTheLedgerLockIsStuckButKeepsTheEntry(t *testing.
 		t.Fatalf("expected the entry kept, got %v %v", found, err)
 	}
 }
+
+func TestCreateTransferDoesNotRecordAResponseMissingAField(t *testing.T) {
+	_, ledger, _, err := createTransfer(t, stubResponse{status: 201, body: `{"id":"pay_1","currency_code":"MAD",` +
+		`"account_id":"acc","external_account_id":"ext_1"}`})
+	if err == nil || !strings.Contains(err.Error(), "amount") || !strings.Contains(err.Error(), "not written to the ledger") {
+		t.Fatalf("expected a missing-field error, got %v", err)
+	}
+	if _, found, _ := ledger.Find("example-1"); found {
+		t.Fatal("expected nothing in the ledger")
+	}
+}

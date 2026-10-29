@@ -41,7 +41,7 @@ Every command reads `.env` (and the authorizer and creator share `ledger.json`) 
 
 ## Run
 
-Terminal 1, the authorizer (it listens on `PORT` from `.env`, 4599 by default; point your tunnel at the same port):
+Terminal 1, the authorizer (it listens on `127.0.0.1:PORT`, `PORT` from `.env`, 4599 by default; point your tunnel at the same port):
 
 ```bash
 go run ./cmd/authorizer

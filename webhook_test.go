@@ -184,3 +184,18 @@ func TestConstructWebhookEventFailures(t *testing.T) {
 		})
 	}
 }
+
+// Two names that normalize to the same header resolve in a fixed order (the
+// sorted names, first wins), so identical requests always verify the same way.
+func TestConstructWebhookEventResolvesDuplicateHeaderNamesDeterministically(t *testing.T) {
+	header := http.Header{
+		"X-Manza-Signature": {webhookSignature},
+		"X_Manza_Signature": {strings.Repeat("0", 64)},
+		"X-Manza-Timestamp": {webhookTimestamp},
+	}
+	for i := 0; i < 50; i++ {
+		if _, err := constructEvent(t, webhookPayload, header, webhookSecret); err != nil {
+			t.Fatalf("attempt %d: %v", i, err)
+		}
+	}
+}

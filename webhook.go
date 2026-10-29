@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -155,16 +156,27 @@ func parseWebhookTimestamp(timestamp string) (int64, bool) {
 
 // normalizeWebhookHeader lowercases names, strips an HTTP_ prefix and turns
 // underscores into dashes, so "HTTP_X_MANZA_SIGNATURE", "x-MANZA-signature"
-// and the canonical "X-Manza-Signature" all read the same.
+// and the canonical "X-Manza-Signature" all read the same. Names that
+// normalize to the same key resolve in sorted order, first wins, so the
+// result never depends on map iteration order.
 func normalizeWebhookHeader(header http.Header) map[string]string {
+	names := make([]string, 0, len(header))
+	for name := range header {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
 	normalized := make(map[string]string, len(header))
-	for name, values := range header {
+	for _, name := range names {
+		values := header[name]
 		if len(values) == 0 {
 			continue
 		}
 		key := strings.ToLower(name)
-		key = strings.TrimPrefix(key, "http_")
-		normalized[strings.ReplaceAll(key, "_", "-")] = values[0]
+		key = strings.ReplaceAll(strings.TrimPrefix(key, "http_"), "_", "-")
+		if _, seen := normalized[key]; !seen {
+			normalized[key] = values[0]
+		}
 	}
 	return normalized
 }

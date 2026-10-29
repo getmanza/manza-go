@@ -3,8 +3,11 @@
 package transferauthorizer
 
 import (
+	"errors"
+	"fmt"
 	"os"
 	"syscall"
+	"time"
 )
 
 // acquireLock takes an exclusive lock on path, creating it, and returns the
@@ -14,9 +17,18 @@ func acquireLock(path string) (func() error, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
-		f.Close()
-		return nil, err
+	// Poll without blocking, like the non-unix lock: give up after 10 s.
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
+		if err == nil {
+			break
+		}
+		if !errors.Is(err, syscall.EWOULDBLOCK) || time.Now().After(deadline) {
+			f.Close()
+			return nil, fmt.Errorf("lock the ledger with %s: %w (is another creator stuck?)", path, err)
+		}
+		time.Sleep(100 * time.Millisecond)
 	}
 	return f.Close, nil
 }

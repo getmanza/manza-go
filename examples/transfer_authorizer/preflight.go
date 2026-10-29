@@ -283,7 +283,11 @@ func (p *Preflight) payeeTrusted(ctx context.Context) {
 			keyFix(err, "MANZA_CREATOR_API_KEY", "beneficiaries:read", "MANZA_BENEFICIARY_ID"))
 		return
 	}
-	accounts, _ := resp.Body["external_accounts"].([]any)
+	accounts, ok := resp.Body["external_accounts"].([]any)
+	if !ok {
+		p.fail("the beneficiary's external_accounts is not a list", "check MANZA_BASE_URL points at the Manza API")
+		return
+	}
 	var account map[string]any
 	for _, a := range accounts {
 		if candidate, ok := a.(map[string]any); ok && candidate["default"] == true {

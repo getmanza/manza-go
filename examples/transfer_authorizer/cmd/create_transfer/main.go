@@ -22,6 +22,12 @@ func main() {
 	if err := transferauthorizer.LoadDotenv(filepath.Join(transferauthorizer.Dir(), ".env")); err != nil {
 		log.Fatalf("read .env: %v", err)
 	}
+	for _, name := range []string{"MANZA_CREATOR_API_KEY", "MANZA_ACCOUNT_ID", "MANZA_BENEFICIARY_ID"} {
+		if os.Getenv(name) == "" {
+			fmt.Fprintf(os.Stderr, "Set %s in %s\n", name, filepath.Join(transferauthorizer.Dir(), ".env"))
+			os.Exit(1)
+		}
+	}
 	amount := "10.00"
 	if len(os.Args) > 1 {
 		amount = os.Args[1]

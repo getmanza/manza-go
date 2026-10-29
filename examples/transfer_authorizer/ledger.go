@@ -12,6 +12,10 @@ import (
 	"strings"
 )
 
+// ErrLockNotReleased wraps a failure to release the ledger lock after the
+// entry was written: the entry is in the ledger, only the lock is stuck.
+var ErrLockNotReleased = errors.New("ledger lock not released")
+
 // Entry is what you recorded about a payment you created.
 type Entry struct {
 	PaymentID    string `json:"payment_id"`
@@ -46,8 +50,8 @@ func (l *Ledger) Record(clientReference string, entry Entry) (err error) {
 		return err
 	}
 	defer func() {
-		if unlockErr := unlock(); err == nil {
-			err = unlockErr
+		if unlockErr := unlock(); err == nil && unlockErr != nil {
+			err = fmt.Errorf("%w: %v", ErrLockNotReleased, unlockErr)
 		}
 	}()
 

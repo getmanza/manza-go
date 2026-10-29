@@ -50,7 +50,10 @@ func CreateTransfer(ctx context.Context, creator *manza.Client, ledger *Ledger, 
 		PaymentID: str(payment["id"]), Amount: str(payment["amount"]), CurrencyCode: str(payment["currency_code"]),
 		AccountID: str(payment["account_id"]), Payee: payee,
 	})
-	if err != nil {
+	if errors.Is(err, ErrLockNotReleased) {
+		// The entry is written; only the next Record would wait on the lock.
+		fmt.Fprintf(out, "warning: payment %s is in the ledger, but %v\n", str(payment["id"]), err)
+	} else if err != nil {
 		return fmt.Errorf("payment %s (client_reference %s) was created but not written to the ledger (%v): "+
 			"if it reaches the authorizer, the authorizer declines it", str(payment["id"]), t.ClientReference, err)
 	}

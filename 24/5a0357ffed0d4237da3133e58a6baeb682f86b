@@ -1,0 +1,35 @@
+examples/transfer_authorizer/README.md
+  s_65c3c5c5f93719::t_668a777db8039a 1-97
+examples/transfer_authorizer/preflight_test.go
+  s_65c3c5c5f93719::t_d122e4274dbc97 1-334
+examples/transfer_authorizer/authorizer.go
+  s_65c3c5c5f93719::t_4326b319de2faa 1-220,222-231,233-286,288,290-308
+examples/transfer_authorizer/ledger.go
+  s_65c3c5c5f93719::t_ad1f9694452b17 1-92
+examples/transfer_authorizer/create.go
+  s_65c3c5c5f93719::t_abc77c3b00d1aa 1-73
+webhook_test.go
+  s_65c3c5c5f93719::t_fdebc90cdbf6c2 1-186
+webhook.go
+  s_65c3c5c5f93719::t_5c1f993de006be 1-172,176,178-181
+examples/transfer_authorizer/authorizer_test.go
+  s_65c3c5c5f93719::t_7e4c551e580aaf 1-503
+examples/transfer_authorizer/preflight.go
+  s_65c3c5c5f93719::t_2863778216da96 1-343
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "245a0357ffed0d4237da3133e58a6baeb682f86b",
+  "prompts": {},
+  "sessions": {
+    "s_65c3c5c5f93719": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "bee1964f-92c4-4310-92b4-5e82d7d3d709",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}

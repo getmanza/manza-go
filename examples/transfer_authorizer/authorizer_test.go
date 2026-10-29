@@ -501,3 +501,31 @@ func equalJSON(a, b map[string]any) bool {
 	y, _ := json.Marshal(b)
 	return bytes.Equal(x, y)
 }
+
+func TestAuthorizerAnswers401ToAStaleTimestampAndCallsNothing(t *testing.T) {
+	h := newHarness(t, true)
+	h.record(t, ledgerEntry())
+	body, _ := json.Marshal(examplePayload())
+	timestamp := strconv.FormatInt(time.Now().Add(-10*time.Minute).Unix(), 10)
+	req := httptest.NewRequest(http.MethodPost, "/", bytes.NewReader(body))
+	req.Header.Set("X-Manza-Signature", manza.SignWebhook(body, timestamp, secret))
+	req.Header.Set("X-Manza-Timestamp", timestamp)
+	rec := httptest.NewRecorder()
+
+	h.app.ServeHTTP(rec, req)
+
+	if rec.Code != 401 || h.api.total() != 0 {
+		t.Fatalf("expected 401 and no call, got %d and %d calls", rec.Code, h.api.total())
+	}
+	h.expectLog(t, "rejected a delivery: webhook timestamp outside tolerance")
+}
+
+func TestAuthorizerRejectsAnOversizedBodyBeforeVerifying(t *testing.T) {
+	h := newHarness(t, true)
+
+	rec := h.deliverSigned(bytes.Repeat([]byte("a"), transferauthorizer.MaxBodyBytes+1), "")
+
+	if rec.Code != 413 || h.api.total() != 0 {
+		t.Fatalf("expected 413 and no call, got %d and %d calls", rec.Code, h.api.total())
+	}
+}

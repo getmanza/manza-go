@@ -29,10 +29,12 @@ _, err = client.PaymentLinks.Cancel(ctx, id)
 
 // Payments (formerly transfer drafts): create, then answer the authorization webhook
 resp, err = client.Payments.Create(ctx, manza.Attributes{"account_id": accountID, "beneficiary_id": beneficiaryID, "amount": "10.0", "client_reference": "inv-42"})
-event, err := manza.ConstructWebhookEvent(rawBody, r.Header, secret) // *ArgumentError when unverified
+event, err := manza.ConstructWebhookEvent(rawBody, r.Header, secret)
+if err != nil { /* *ArgumentError: unverified, answer 401 and stop */ }
 input := manza.SignatureInput(manza.TransferAuthorizationFields{ /* from YOUR own record */ })
-_, err = client.Payments.Authorize(ctx, paymentID, authorizationID, manza.Sign(secret, input))
-_, err = client.Payments.Decline(ctx, paymentID, authorizationID, "wrong amount")
+// authorizer: a second client on key B; the creating key gets same_key_forbidden
+_, err = authorizer.Payments.Authorize(ctx, paymentID, authorizationID, manza.Sign(secret, input))
+_, err = authorizer.Payments.Decline(ctx, paymentID, authorizationID, "wrong amount")
 _, err = client.TransferAuthorizer.Get(ctx) // not-found *Error: none enrolled
 
 // Beneficiaries, external accounts, payee trust (0.3.0)

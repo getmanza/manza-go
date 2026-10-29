@@ -36,10 +36,16 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	allowNewPayees := true
-	switch strings.ToLower(strings.TrimSpace(os.Getenv("ALLOW_NEW_PAYEES"))) {
+	var allowNewPayees bool
+	switch value := strings.ToLower(strings.TrimSpace(os.Getenv("ALLOW_NEW_PAYEES"))); value {
+	case "", "true", "1", "yes":
+		allowNewPayees = true
 	case "false", "0", "no":
 		allowNewPayees = false
+	default:
+		// A typo must not leave new payees allowed by accident.
+		fmt.Fprintf(os.Stderr, "ALLOW_NEW_PAYEES=%q: use true or false\n", value)
+		os.Exit(1)
 	}
 	app := transferauthorizer.NewApp(client, os.Getenv("MANZA_AUTHORIZER_SECRET"),
 		transferauthorizer.NewLedger(filepath.Join(transferauthorizer.Dir(), "ledger.json")), allowNewPayees)

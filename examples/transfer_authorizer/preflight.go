@@ -117,7 +117,13 @@ func (p *Preflight) keys() bool {
 
 func (p *Preflight) buildClients() error {
 	var err error
-	baseURL := manza.WithBaseURL(p.env("MANZA_BASE_URL")) // empty: https://ma.manza.finance
+	// The SDK's own lookup, through p.env: MANZA_BASE_URL, then the legacy
+	// ZAZU_BASE_URL; empty means https://ma.manza.finance.
+	base := p.env("MANZA_BASE_URL")
+	if base == "" {
+		base = p.env("ZAZU_BASE_URL")
+	}
+	baseURL := manza.WithBaseURL(base)
 	if p.creator, err = manza.New(manza.WithAPIKey(p.env("MANZA_CREATOR_API_KEY")), baseURL); err != nil {
 		return err
 	}
@@ -238,7 +244,7 @@ func (p *Preflight) endpointEnabled(ctx context.Context, authorizer map[string]a
 		return
 	}
 	for _, domain := range unstableTunnelHosts {
-		if strings.HasSuffix(parsed.Hostname(), domain) {
+		if host := parsed.Hostname(); host == domain || strings.HasSuffix(host, "."+domain) {
 			p.warn(fmt.Sprintf("webhook endpoint is on %s, whose URL changes when the tunnel restarts", domain),
 				"use a reserved domain or a named tunnel, then enrol an endpoint at that URL")
 			return

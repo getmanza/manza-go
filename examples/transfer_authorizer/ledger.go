@@ -88,5 +88,8 @@ func (l *Ledger) read() (map[string]Entry, error) {
 	if err := json.Unmarshal(raw, &entries); err != nil {
 		return nil, fmt.Errorf("read ledger %s: %w", l.path, err)
 	}
+	if entries == nil { // the file held JSON null
+		entries = map[string]Entry{}
+	}
 	return entries, nil
 }

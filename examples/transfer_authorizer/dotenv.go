@@ -10,7 +10,8 @@ import (
 // LoadDotenv sets every KEY=VALUE line of the file at path as an environment
 // variable, overriding what the shell exported (a stale export would
 // otherwise mask the value in .env). A missing file is not an error. Blank
-// lines and # comments are skipped; a value may be wrapped in quotes.
+// lines and # comments are skipped; a value may be wrapped in quotes, and a
+// " # comment" may follow it.
 func LoadDotenv(path string) error {
 	f, err := os.Open(path)
 	if errors.Is(err, os.ErrNotExist) {
@@ -32,8 +33,11 @@ func LoadDotenv(path string) error {
 			continue
 		}
 		value = strings.TrimSpace(value)
-		if len(value) >= 2 && (value[0] == '"' || value[0] == '\'') && value[len(value)-1] == value[0] {
-			value = value[1 : len(value)-1]
+		if len(value) >= 2 && (value[0] == '"' || value[0] == '\'') {
+			// A quoted value ends at its closing quote; a comment may follow.
+			if end := strings.IndexByte(value[1:], value[0]); end >= 0 {
+				value = value[1 : end+1]
+			}
 		} else if i := strings.Index(value, " #"); i >= 0 {
 			value = strings.TrimSpace(value[:i])
 		}

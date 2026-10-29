@@ -17,6 +17,10 @@ import (
 // Event is the only webhook event the authorizer answers.
 const Event = "payment.authorization_requested"
 
+// MaxBodyBytes caps a delivery's body. It is read before the signature can be
+// checked, so an unbounded read would let anyone exhaust memory.
+const MaxBodyBytes = 1 << 20
+
 const (
 	attempts      = 3
 	maxRetryAfter = 30 * time.Second // a challenge expires, so never park for long
@@ -79,10 +83,15 @@ func NewApp(client *manza.Client, secret string, ledger *Ledger, allowNewPayees 
 }
 
 func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(r.Body)
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, MaxBodyBytes))
 	if err != nil {
 		a.logf("WARN", "rejected a delivery: %v", err)
-		respond(w, http.StatusUnauthorized)
+		status := http.StatusBadRequest
+		var tooLarge *http.MaxBytesError
+		if errors.As(err, &tooLarge) {
+			status = http.StatusRequestEntityTooLarge
+		}
+		respond(w, status)
 		return
 	}
 	event, err := manza.ConstructWebhookEvent(body, r.Header, a.Secret)
@@ -111,11 +120,7 @@ func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func respond(w http.ResponseWriter, status int) {
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(status)
-	if status == http.StatusOK {
-		fmt.Fprint(w, "ok")
-	} else {
-		fmt.Fprint(w, "unauthorized")
-	}
+	fmt.Fprint(w, map[int]string{http.StatusOK: "ok", http.StatusUnauthorized: "unauthorized"}[status])
 }
 
 func (a *App) answer(data map[string]any) {

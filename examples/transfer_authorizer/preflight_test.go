@@ -295,6 +295,30 @@ func TestPreflightWarnsWhenTheEndpointURLChangesWhenTheTunnelRestarts(t *testing
 	}
 }
 
+func TestPreflightDoesNotWarnForAHostThatOnlyEndsLikeATunnel(t *testing.T) {
+	stub := newPreflightStub()
+	stub.endpoint["url"] = "https://notngrok-free.app/"
+	_, output := stub.run(t, "10.00")
+
+	if warnings := linesWith(output, "!"); len(warnings) != 0 {
+		t.Fatalf("expected no warning:\n%s", output)
+	}
+}
+
+func TestPreflightReadsTheLegacyBaseURL(t *testing.T) {
+	stub := newPreflightStub()
+	server := httptest.NewServer(stub)
+	t.Cleanup(server.Close)
+	stub.env["ZAZU_BASE_URL"] = server.URL
+	out := &bytes.Buffer{}
+	now := time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC)
+	ok := transferauthorizer.NewPreflight(func(name string) string { return stub.env[name] }, "10.00", out, now).Run(context.Background())
+
+	if !ok || stub.requests == 0 {
+		t.Fatalf("expected the stub at ZAZU_BASE_URL to answer:\n%s", out.String())
+	}
+}
+
 func TestPreflightFailsWhenTheAmountIsOverTheLimitPerTransfer(t *testing.T) {
 	_, output := newPreflightStub().run(t, "1500.00")
 

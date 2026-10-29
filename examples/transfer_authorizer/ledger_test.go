@@ -46,3 +46,16 @@ func TestLedgerTreatsAMissingOrEmptyFileAsEmpty(t *testing.T) {
 		t.Fatalf("empty file: %v %v", found, err)
 	}
 }
+
+func TestLedgerRecordsIntoALedgerFileHoldingNull(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "ledger.json")
+	if err := os.WriteFile(path, []byte("null"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := transferauthorizer.NewLedger(path).Record("po_1", ledgerEntry()); err != nil {
+		t.Fatalf("record: %v", err)
+	}
+	if _, found, err := transferauthorizer.NewLedger(path).Find("po_1"); err != nil || !found {
+		t.Fatalf("expected po_1, got %v %v", found, err)
+	}
+}

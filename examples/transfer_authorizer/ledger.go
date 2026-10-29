@@ -16,6 +16,9 @@ import (
 // entry was written: the entry is in the ledger, only the lock is stuck.
 var ErrLockNotReleased = errors.New("ledger lock not released")
 
+// lockFile is acquireLock; tests swap it to fail the release.
+var lockFile = acquireLock
+
 // Entry is what you recorded about a payment you created.
 type Entry struct {
 	PaymentID    string `json:"payment_id"`

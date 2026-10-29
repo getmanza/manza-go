@@ -9,11 +9,11 @@ import (
 	"time"
 )
 
-// lockFile takes the lock by creating path exclusively, waiting up to 10 s
+// acquireLock takes the lock by creating path exclusively, waiting up to 10 s
 // for another writer to release it, and returns the function that releases
 // it (removing the file, retried briefly while another process holds it
 // open). A crash leaves the file behind: delete it.
-func lockFile(path string) (func() error, error) {
+func acquireLock(path string) (func() error, error) {
 	deadline := time.Now().Add(10 * time.Second)
 	for {
 		f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0o600)

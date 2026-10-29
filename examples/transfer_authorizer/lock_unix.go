@@ -7,9 +7,9 @@ import (
 	"syscall"
 )
 
-// lockFile takes an exclusive lock on path, creating it, and returns the
+// acquireLock takes an exclusive lock on path, creating it, and returns the
 // function that releases it (closing the file drops the lock).
-func lockFile(path string) (func() error, error) {
+func acquireLock(path string) (func() error, error) {
 	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0o600)
 	if err != nil {
 		return nil, err

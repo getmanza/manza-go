@@ -82,3 +82,18 @@ func TestCreateTransferDoesNotRecordAPaymentWithoutAPayee(t *testing.T) {
 		t.Fatal("expected nothing in the ledger")
 	}
 }
+
+func TestCreateTransferWarnsWhenTheLedgerLockIsStuckButKeepsTheEntry(t *testing.T) {
+	t.Cleanup(transferauthorizer.FailLockRelease())
+
+	_, ledger, out, err := createTransfer(t, stubResponse{status: 201, body: `{"id":"pay_1","amount":"10.0",` +
+		`"currency_code":"MAD","account_id":"acc","external_account_id":"ext_1","authorization":{"status":"pending"}}`})
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	expectContains(t, out, "warning: payment pay_1 is in the ledger, but ledger lock not released: lock file stuck",
+		"created payment pay_1")
+	if _, found, err := ledger.Find("example-1"); err != nil || !found {
+		t.Fatalf("expected the entry kept, got %v %v", found, err)
+	}
+}

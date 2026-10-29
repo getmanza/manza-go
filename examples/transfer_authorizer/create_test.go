@@ -74,7 +74,7 @@ func TestCreateTransferReportsTheErrorTypeAndRequestID(t *testing.T) {
 }
 
 func TestCreateTransferDoesNotRecordAPaymentWithoutAPayee(t *testing.T) {
-	_, ledger, _, err := createTransfer(t, stubResponse{status: 201, body: `{"id":"pay_1","amount":"10.0"}`})
+	_, ledger, _, err := createTransfer(t, stubResponse{status: 201, body: `{"id":"pay_1","amount":"10.0","currency_code":"MAD","account_id":"acc"}`})
 	if err == nil || !strings.Contains(err.Error(), "not written to the ledger") {
 		t.Fatalf("expected a not-written error, got %v", err)
 	}

@@ -142,11 +142,11 @@ func (c webhookConfig) timestampFresh(timestamp string) bool {
 	if !ok {
 		return false
 	}
-	age := c.now.Unix() - seconds
+	age := c.now.Sub(time.Unix(seconds, 0))
 	if age < 0 {
 		age = -age
 	}
-	return age <= int64(c.tolerance/time.Second)
+	return age <= c.tolerance
 }
 
 func parseWebhookTimestamp(timestamp string) (int64, bool) {

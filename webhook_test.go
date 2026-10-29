@@ -62,11 +62,18 @@ func TestVerifyWebhook(t *testing.T) {
 		{"honours a custom tolerance", func(a *args) {
 			a.opts = []manza.WebhookOption{manza.WithWebhookNow(webhookNow.Add(61 * time.Second)), manza.WithWebhookTolerance(time.Minute)}
 		}, false},
+		{"rejects a timestamp half a second past the tolerance", func(a *args) {
+			a.opts = []manza.WebhookOption{manza.WithWebhookNow(webhookNow.Add(300*time.Second + 500*time.Millisecond))}
+		}, false},
+		{"compares a sub-second tolerance exactly", func(a *args) {
+			a.opts = []manza.WebhookOption{manza.WithWebhookNow(webhookNow.Add(1900 * time.Millisecond)), manza.WithWebhookTolerance(1500 * time.Millisecond)}
+		}, false},
 		{"skips the timestamp check without a tolerance", func(a *args) {
 			a.opts = []manza.WebhookOption{manza.WithWebhookNow(webhookNow.Add(24 * time.Hour)), manza.WithoutWebhookTolerance()}
 		}, true},
 		{"rejects a non-numeric timestamp", func(a *args) {
 			a.timestamp = "yesterday"
+			a.signature = manza.SignWebhook([]byte(a.payload), a.timestamp, a.secret)
 			a.opts = []manza.WebhookOption{manza.WithoutWebhookTolerance()}
 		}, false},
 		{"rejects an empty signature", func(a *args) { a.signature = "" }, false},

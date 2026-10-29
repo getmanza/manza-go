@@ -40,12 +40,16 @@ func NewLedger(path string) *Ledger { return &Ledger{path: path} }
 // to a temporary file and renamed over the old one, so a reader sees the old
 // or the new ledger, never a half-written one, and a crash mid-write leaves
 // the old ledger intact.
-func (l *Ledger) Record(clientReference string, entry Entry) error {
+func (l *Ledger) Record(clientReference string, entry Entry) (err error) {
 	unlock, err := lockFile(l.path + ".lock")
 	if err != nil {
 		return err
 	}
-	defer unlock()
+	defer func() {
+		if unlockErr := unlock(); err == nil {
+			err = unlockErr
+		}
+	}()
 
 	entries, err := l.read()
 	if err != nil {

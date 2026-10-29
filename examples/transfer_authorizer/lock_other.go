@@ -11,14 +11,15 @@ import (
 
 // lockFile takes the lock by creating path exclusively, waiting up to 10 s
 // for another writer to release it, and returns the function that releases
-// it (removing the file). A crash leaves the file behind: delete it.
-func lockFile(path string) (func(), error) {
+// it (removing the file, retried briefly while another process holds it
+// open). A crash leaves the file behind: delete it.
+func lockFile(path string) (func() error, error) {
 	deadline := time.Now().Add(10 * time.Second)
 	for {
 		f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0o600)
 		if err == nil {
 			f.Close()
-			return func() { os.Remove(path) }, nil
+			return func() error { return removeWithRetry(path) }, nil
 		}
 		if !errors.Is(err, os.ErrExist) {
 			return nil, err
@@ -28,4 +29,15 @@ func lockFile(path string) (func(), error) {
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
+}
+
+func removeWithRetry(path string) error {
+	var err error
+	for attempt := 0; attempt < 5; attempt++ {
+		if err = os.Remove(path); err == nil || errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	return fmt.Errorf("release the ledger lock %s: %w (delete it by hand)", path, err)
 }

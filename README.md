@@ -125,8 +125,12 @@ timestamp within 5 minutes, and returns the parsed event (a
 func handle(w http.ResponseWriter, r *http.Request) {
     // Cap the body: it is read before the signature can be checked.
     body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 1<<20))
-    if err != nil {
+    var tooLarge *http.MaxBytesError
+    if errors.As(err, &tooLarge) {
         w.WriteHeader(http.StatusRequestEntityTooLarge)
+        return
+    } else if err != nil {
+        w.WriteHeader(http.StatusBadRequest)
         return
     }
     event, err := manza.ConstructWebhookEvent(body, r.Header, signingSecret)

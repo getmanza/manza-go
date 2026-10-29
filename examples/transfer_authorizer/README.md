@@ -21,7 +21,7 @@ cp .env.example .env         # fill in both keys, the signing secret, the accoun
 go run ./cmd/preflight       # or: go run ./cmd/preflight 250.00, the amount you will send
 ```
 
-Every command reads `.env` from the current directory and lets it override what your shell exported.
+Every command reads `.env` (and the authorizer and creator share `ledger.json`) in this directory, whatever directory you run it from, and `.env` overrides what your shell exported.
 
 ## Preflight
 

@@ -11,13 +11,14 @@ import (
 	"context"
 	"log"
 	"os"
+	"path/filepath"
 	"time"
 
 	transferauthorizer "github.com/getmanza/manza-go/examples/transfer_authorizer"
 )
 
 func main() {
-	if err := transferauthorizer.LoadDotenv(".env"); err != nil {
+	if err := transferauthorizer.LoadDotenv(filepath.Join(transferauthorizer.Dir(), ".env")); err != nil {
 		log.Fatalf("read .env: %v", err)
 	}
 	amount := "10.00"

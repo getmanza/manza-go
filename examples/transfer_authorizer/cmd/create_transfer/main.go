@@ -12,13 +12,14 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 
 	manza "github.com/getmanza/manza-go"
 	transferauthorizer "github.com/getmanza/manza-go/examples/transfer_authorizer"
 )
 
 func main() {
-	if err := transferauthorizer.LoadDotenv(".env"); err != nil {
+	if err := transferauthorizer.LoadDotenv(filepath.Join(transferauthorizer.Dir(), ".env")); err != nil {
 		log.Fatalf("read .env: %v", err)
 	}
 	amount := "10.00"
@@ -34,7 +35,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	err = transferauthorizer.CreateTransfer(context.Background(), creator, transferauthorizer.NewLedger("ledger.json"),
+	err = transferauthorizer.CreateTransfer(context.Background(), creator, transferauthorizer.NewLedger(filepath.Join(transferauthorizer.Dir(), "ledger.json")),
 		transferauthorizer.Transfer{
 			AccountID:       os.Getenv("MANZA_ACCOUNT_ID"),
 			BeneficiaryID:   os.Getenv("MANZA_BENEFICIARY_ID"),

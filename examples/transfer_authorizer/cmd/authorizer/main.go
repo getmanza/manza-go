@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -17,7 +18,7 @@ import (
 )
 
 func main() {
-	if err := transferauthorizer.LoadDotenv(".env"); err != nil {
+	if err := transferauthorizer.LoadDotenv(filepath.Join(transferauthorizer.Dir(), ".env")); err != nil {
 		log.Fatalf("read .env: %v", err)
 	}
 	var missing []string
@@ -41,7 +42,7 @@ func main() {
 		allowNewPayees = false
 	}
 	app := transferauthorizer.NewApp(client, os.Getenv("MANZA_AUTHORIZER_SECRET"),
-		transferauthorizer.NewLedger("ledger.json"), allowNewPayees)
+		transferauthorizer.NewLedger(filepath.Join(transferauthorizer.Dir(), "ledger.json")), allowNewPayees)
 
 	port := os.Getenv("PORT")
 	if port == "" {

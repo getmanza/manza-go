@@ -27,11 +27,13 @@ page, err := client.Accounts.List(ctx, manza.AccountListParams{CurrencyCode: "MA
 page, err = client.Customers.List(ctx, manza.CustomerListParams{Query: "Acme"})
 _, err = client.PaymentLinks.Cancel(ctx, id)
 
-// Transfer drafts (0.3.0): create, then answer the authorization webhook
-resp, err = client.TransferDrafts.Create(ctx, manza.Attributes{"account_id": accountID, "beneficiary_id": beneficiaryID, "amount": "10.0", "client_reference": "inv-42"})
+// Payments (formerly transfer drafts): create, then answer the authorization webhook
+resp, err = client.Payments.Create(ctx, manza.Attributes{"account_id": accountID, "beneficiary_id": beneficiaryID, "amount": "10.0", "client_reference": "inv-42"})
+event, err := manza.ConstructWebhookEvent(rawBody, r.Header, secret) // *ArgumentError when unverified
 input := manza.SignatureInput(manza.TransferAuthorizationFields{ /* from YOUR own record */ })
-_, err = client.TransferDrafts.Authorize(ctx, draftID, authorizationID, manza.Sign(secret, input))
-_, err = client.TransferDrafts.Decline(ctx, draftID, authorizationID, "wrong amount")
+_, err = client.Payments.Authorize(ctx, paymentID, authorizationID, manza.Sign(secret, input))
+_, err = client.Payments.Decline(ctx, paymentID, authorizationID, "wrong amount")
+_, err = client.TransferAuthorizer.Get(ctx) // not-found *Error: none enrolled
 
 // Beneficiaries, external accounts, payee trust (0.3.0)
 _, err = client.Beneficiaries.Create(ctx, attrs)
@@ -47,11 +49,13 @@ if errors.As(err, &apiErr) && apiErr.Kind == manza.KindConflict {
 }
 ```
 
-- Services on `Client`: `Accounts`, `Beneficiaries`, `CheckoutSessions`, `Customers`, `Entity`, `Invoices`, `PayeeTrustRequests`, `PaymentLinks`, `TransferDrafts`, `WebhookEndpoints`.
+- Services on `Client`: `Accounts`, `Beneficiaries`, `CheckoutSessions`, `Customers`, `Entity`, `Invoices`, `PayeeTrustRequests`, `PaymentLinks`, `Payments`, `TransferAuthorizer`, `WebhookEndpoints`. `TransferDrafts` is the deprecated alias of `Payments` for all of 1.x (same `*PaymentsService`; `TransferDraftsService` is a type alias).
 - `manza.Page` (`page.go`): cursor-based, hard cap `MaxPerPage` = 100; `Next(ctx)` returns nil on the last page.
 - `*manza.Response` carries `Body` (snake_case `map[string]any`, as-is) and `Raw`. `Response.Decode` maps it onto the typed models in `types.go` (additive; `Body` is unchanged).
 - Errors: a single `*Error` with a `Kind` (`KindAuthentication`, `KindForbidden`, `KindNotFound`, `KindValidation` for 400 and 422, `KindConflict` for 409 with `PaymentID`, `KindRateLimit`, `KindServer`, `KindAPI`), plus `*ConfigurationError`, `*ConnectionError` and `*ArgumentError` (a value the SDK refuses to send, no HTTP made, e.g. a blank signature). Never match status codes.
 - Signer (`transfer_authorization.go`): `SignatureInput`, `Sign`, `PayeeFor`.
+- Webhook verifier (`webhook.go`): `VerifyWebhook`, `ConstructWebhookEvent`, `SignWebhook` and the `WebhookOption`s. Failures are `*ArgumentError` with manza-ruby's exact messages.
+- `examples/transfer_authorizer/` is its **own Go module** (`replace` onto `../..`) so it stays out of the published module zip; root `./...` does not reach it, so CI and `scripts/release-check` run its `go vet` and `go test` separately. It uses the standard library only.
 - Snake-case wire format: bodies are returned as-is. **No auto-camelCasing.**
 
 ## How to work in this codebase
@@ -66,12 +70,12 @@ if errors.As(err, &apiErr) && apiErr.Kind == manza.KindConflict {
 - **Never call a live Manza API.** Not from tests, scripts or Claude sessions. Tests replay manza-ruby's cassettes against an `httptest.Server` only. Live staging calls create real transfers and approval requests for the team. Only manza-ruby records cassettes.
 - **`gofmt -l .`, `go vet ./...` and `go test ./...` before every commit.** CI runs the same (`scripts/release-check` too).
 - **Cassette contract.**
-  - Cassettes come from the manza-ruby release pinned in `scripts/fetch-cassettes.sh` (`PINNED_TAG`, `cassettes-vX.Y.Z.tar.gz`), not the newest one, into `testdata/cassettes/`. Request-body literals recorded in the cassettes (`zazu-ruby-fixture`, `Created by zazu-ruby fixture spec`, `zazu-fixture-success`) stay verbatim in `resources_test.go`: the body match is semantic, so renaming them breaks replay. They are recorded against `https://ma.manza.dev`; the harness fails any cassette whose URI is on another host (`replayHost`).
-  - Load **one cassette per test** where two share method + URI: `transfer_drafts/authorize` vs `authorize_same_key`, and `create` vs `create_duplicate`. The server serves the first matching interaction.
-  - The three `transfer_drafts/authorize*` cassettes match method + path + query + the JSON body minus `signature` (the recorded value is a scrubbed HMAC replay cannot reproduce).
+  - Cassettes come from the manza-ruby release pinned in `scripts/fetch-cassettes.sh` (`PINNED_TAG`, `cassettes-vX.Y.Z.tar.gz`), not the newest one, into `testdata/cassettes/`. Request-body literals recorded in the cassettes (`[zazu-ruby-fixture] create spec - do not approve`, `Manza Fixture Beneficiary spec`, `Created by zazu-ruby fixture spec`, `zazu-fixture-success`) stay verbatim in `resources_test.go`: the body match is semantic, so renaming them breaks replay. They are recorded against `https://ma.manza.dev`; the harness fails any cassette whose URI is on another host (`replayHost`).
+  - Load **one cassette per test** where two share method + URI: `payments/authorize` vs `authorize_same_key`, and `create` vs `create_duplicate`. The server serves the first matching interaction.
+  - The four `payments/authorize*` cassettes match method + path + query + the JSON body minus `signature` (the recorded value is a scrubbed HMAC replay cannot reproduce).
   - Every other cassette matches method + path + query + **semantic JSON body** (`jsonEqual`: parsed and compared, not byte-for-byte, because Go sorts map keys). Bodies built from structs keep the recorded key order.
   - Cassette responses carry no `Content-Length`; `net/http` computes it. Don't add it.
-  - The `fixtureIDs` table in `cassette_test.go` must stay identical to manza-ruby's `spec/support/fixture_ids.rb` (29 entries). Tests call `fixtureID(t, "MANZA_FIXTURE_X")`.
+  - The `fixtureIDs` table in `cassette_test.go` must stay identical to manza-ruby's `spec/support/fixture_ids.rb` (34 entries). Tests call `fixtureID(t, "MANZA_FIXTURE_X")`.
 - **Replay failures.** `no cassette interaction matches` means the request drifted: fix the SDK's request, never loosen the matcher, skip the test (`t.Skip`) or edit a cassette. A genuinely new request shape is re-recorded in manza-ruby first. Check a drifted `fixtureIDs` entry and two cassettes loaded in one test before anything else. A cassette-fetch failure is the pinned release or its tarball missing, or a transient 5xx (the script retries).
 - **Errors and types.** Return errors, never discard one with `_ =`; fix the producer instead of hiding a wrong shape behind a `.(string)` assertion. A public API break is made only on purpose, named in the changelog and released as a major version.
 - **Hosts.** Default `https://ma.manza.finance`, South Africa `https://za.manza.finance`, staging and cassettes `https://ma.manza.dev`. Env vars are `MANZA_API_KEY`, `MANZA_BASE_URL` and `MANZA_API_VERSION` (`env.go`). The legacy `ZAZU_*` names are read as a fallback with a one-time stderr deprecation warning per variable, for all of 1.x; there is no timeout env var in this SDK. The request header is `Manza-Version`, the User-Agent `manza-go/<Version>`.
@@ -154,15 +158,16 @@ The exact steps from `.github/workflows/ci.yml`:
 
 ```bash
 # One-time setup (Go 1.24+), and again when manza-ruby ships a new release
-scripts/fetch-cassettes.sh            # pinned manza-ruby tarball (v1.0.0) -> testdata/cassettes/
+scripts/fetch-cassettes.sh            # pinned manza-ruby tarball (v1.3.0) -> testdata/cassettes/
 scripts/fetch-cassettes.sh v0.3.0     # or a specific tag
 
 # Daily loop
-go test -run TestTransferDrafts ./...  # while iterating
+go test -run TestPayments ./...        # while iterating
 go test ./...                          # full suite (CI)
 gofmt -l .                             # must print nothing
 gofmt -w .                             # fix formatting
 go vet ./...                           # lint
+(cd examples/transfer_authorizer && go vet ./... && go test ./...)   # the example module
 
 # Release (after PR merge, from a clean, up-to-date main)
 bin/release list        # last releases + what patch/minor/major would give
@@ -174,9 +179,9 @@ bin/release minor       # or patch (default), major, an explicit 0.4.0; --force 
 
 ## Workflow
 
-- **Verify:** `gofmt -l .` (prints nothing) · `go vet ./...` · `go test ./...` (after `scripts/fetch-cassettes.sh`; `scripts/release-check` runs the same)
+- **Verify:** `gofmt -l .` (prints nothing) · `go vet ./...` · `go test ./...` (after `scripts/fetch-cassettes.sh`) · in `examples/transfer_authorizer`: `go vet ./...` · `go test ./...` (`scripts/release-check` runs the same)
 - **Specs:** fast loop `go test -run <TestName> ./...`; full suite `go test ./...` (replay only: no network); two worktrees at once: yes, each needs `scripts/fetch-cassettes.sh` (`testdata/cassettes/` is gitignored)
-- **CI:** required none; job `test` (`ci.yml`: fetch cassettes, gofmt, go vet, go test) and the `cubic · AI code reviewer` check; full suite on the PR; failure report none
+- **CI:** required none; job `test` (`ci.yml`: fetch cassettes, gofmt, go vet, go test, then go vet + go test in the example module) and the `cubic · AI code reviewer` check; full suite on the PR; failure report none
 - **Review bot:** cubic; push back, citing this file, on mocks instead of cassettes, camelCased wire keys, `//nolint` escapes, speculative abstractions
 - **Merge:** squash — `gh pr merge <PR> --squash --delete-branch`; fallback after the gate: `--admin` for the required approving review
 - **PR contract:** `## Summary` (`Closes #N`), `## Fable validation` (verdict, Not verified), `## Test plan`; backticks unescaped; labels none; screenshots none

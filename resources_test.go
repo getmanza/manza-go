@@ -197,19 +197,20 @@ func TestWebhookEndpoints(t *testing.T) {
 	}
 }
 
-func TestTransferDraftsCreate(t *testing.T) {
-	server := startReplayServer(t, "transfer_drafts/create")
+func TestPaymentsCreate(t *testing.T) {
+	server := startReplayServer(t, "payments/create")
 	client := replayClient(t, server)
 
-	resp, err := client.TransferDrafts.Create(context.Background(), manza.Attributes{
+	resp, err := client.Payments.Create(context.Background(), manza.Attributes{
 		"account_id":        fixtureID(t, "MANZA_FIXTURE_ACCOUNT_ID"),
 		"beneficiary_id":    fixtureID(t, "MANZA_FIXTURE_BENEFICIARY_ID"),
-		"amount":            "150.00",
+		"amount":            "10.00",
 		"payment_reference": "SDK fixture",
+		"internal_notes":    "[zazu-ruby-fixture] create spec - do not approve",
 		"client_reference":  fixtureID(t, "MANZA_FIXTURE_CLIENT_REFERENCE"),
 	})
 	if err != nil {
-		t.Fatalf("transfer drafts create: %v", err)
+		t.Fatalf("payments create: %v", err)
 	}
 	if resp.Status != 201 {
 		t.Fatalf("expected 201, got %d", resp.Status)
@@ -220,19 +221,20 @@ func TestTransferDraftsCreate(t *testing.T) {
 	if ref, _ := resp.Body["client_reference"].(string); ref != fixtureID(t, "MANZA_FIXTURE_CLIENT_REFERENCE") {
 		t.Fatalf("expected client_reference echoed, got %q", ref)
 	}
-	if _, ok := resp.Body["authorization"]; !ok {
-		t.Fatal("expected an authorization key")
+	// Inside the envelope: the challenge went to the authorizer.
+	if authorization, _ := resp.Body["authorization"].(map[string]any); authorization["status"] != "pending" {
+		t.Fatalf("expected a pending authorization, got %#v", resp.Body["authorization"])
 	}
 	if resp.Body["transfer"] != nil {
 		t.Fatalf("expected nil transfer before approval, got %#v", resp.Body["transfer"])
 	}
 }
 
-func TestTransferDraftsCreateDuplicate(t *testing.T) {
-	server := startReplayServer(t, "transfer_drafts/create_duplicate")
+func TestPaymentsCreateDuplicate(t *testing.T) {
+	server := startReplayServer(t, "payments/create_duplicate")
 	client := replayClient(t, server)
 
-	_, err := client.TransferDrafts.Create(context.Background(), manza.Attributes{
+	_, err := client.Payments.Create(context.Background(), manza.Attributes{
 		"account_id":       fixtureID(t, "MANZA_FIXTURE_ACCOUNT_ID"),
 		"beneficiary_id":   fixtureID(t, "MANZA_FIXTURE_BENEFICIARY_ID"),
 		"amount":           "10.00",
@@ -253,13 +255,13 @@ func TestTransferDraftsCreateDuplicate(t *testing.T) {
 	}
 }
 
-func TestTransferDraftsGet(t *testing.T) {
-	server := startReplayServer(t, "transfer_drafts/get")
+func TestPaymentsGet(t *testing.T) {
+	server := startReplayServer(t, "payments/get")
 	client := replayClient(t, server)
 
-	got, err := client.TransferDrafts.Get(context.Background(), fixtureID(t, "MANZA_FIXTURE_TRANSFER_DRAFT_ID"))
+	got, err := client.Payments.Get(context.Background(), fixtureID(t, "MANZA_FIXTURE_TRANSFER_DRAFT_ID"))
 	if err != nil {
-		t.Fatalf("transfer drafts get: %v", err)
+		t.Fatalf("payments get: %v", err)
 	}
 	if _, ok := got.Body["status"].(string); !ok {
 		t.Fatalf("expected string status, got %#v", got.Body["status"])
@@ -269,14 +271,14 @@ func TestTransferDraftsGet(t *testing.T) {
 	}
 }
 
-func TestTransferDraftsAuthorizeBlankSignature(t *testing.T) {
+func TestPaymentsAuthorizeBlankSignature(t *testing.T) {
 	// No server: a blank signature must fail before any HTTP call.
 	client, err := manza.New(manza.WithAPIKey("test"), manza.WithBaseURL("http://127.0.0.1:1"))
 	if err != nil {
 		t.Fatalf("build client: %v", err)
 	}
 	for _, signature := range []string{"", "   "} {
-		_, err := client.TransferDrafts.Authorize(context.Background(), "draft", "auth", signature)
+		_, err := client.Payments.Authorize(context.Background(), "draft", "auth", signature)
 		var argErr *manza.ArgumentError
 		if !errors.As(err, &argErr) {
 			t.Fatalf("signature %q: expected *manza.ArgumentError, got %T (%v)", signature, err, err)
@@ -284,11 +286,11 @@ func TestTransferDraftsAuthorizeBlankSignature(t *testing.T) {
 	}
 }
 
-func TestTransferDraftsAuthorizeBadSignature(t *testing.T) {
-	server := startReplayServer(t, "transfer_drafts/authorize_bad_signature")
+func TestPaymentsAuthorizeBadSignature(t *testing.T) {
+	server := startReplayServer(t, "payments/authorize_bad_signature")
 	client := replayClient(t, server)
 
-	_, err := client.TransferDrafts.Authorize(context.Background(),
+	_, err := client.Payments.Authorize(context.Background(),
 		fixtureID(t, "MANZA_FIXTURE_BAD_SIGNATURE_DRAFT_ID"),
 		fixtureID(t, "MANZA_FIXTURE_BAD_SIGNATURE_AUTHORIZATION_ID"),
 		strings.Repeat("0", 64))
@@ -301,11 +303,11 @@ func TestTransferDraftsAuthorizeBadSignature(t *testing.T) {
 	}
 }
 
-func TestTransferDraftsAuthorizeSameKey(t *testing.T) {
-	server := startReplayServer(t, "transfer_drafts/authorize_same_key")
+func TestPaymentsAuthorizeSameKey(t *testing.T) {
+	server := startReplayServer(t, "payments/authorize_same_key")
 	client := replayClient(t, server)
 
-	_, err := client.TransferDrafts.Authorize(context.Background(),
+	_, err := client.Payments.Authorize(context.Background(),
 		fixtureID(t, "MANZA_FIXTURE_AUTHORIZABLE_DRAFT_ID"),
 		fixtureID(t, "MANZA_FIXTURE_AUTHORIZABLE_AUTHORIZATION_ID"),
 		strings.Repeat("0", 64))
@@ -318,8 +320,8 @@ func TestTransferDraftsAuthorizeSameKey(t *testing.T) {
 	}
 }
 
-func TestTransferDraftsAuthorize(t *testing.T) {
-	server := startReplayServer(t, "transfer_drafts/authorize")
+func TestPaymentsAuthorize(t *testing.T) {
+	server := startReplayServer(t, "payments/authorize")
 	client := replayClient(t, server)
 
 	draftID := fixtureID(t, "MANZA_FIXTURE_AUTHORIZABLE_DRAFT_ID")
@@ -337,7 +339,7 @@ func TestTransferDraftsAuthorize(t *testing.T) {
 		ClientReference: fixtureID(t, "MANZA_FIXTURE_AUTHORIZABLE_CLIENT_REFERENCE"),
 	})
 
-	resp, err := client.TransferDrafts.Authorize(context.Background(), draftID,
+	resp, err := client.Payments.Authorize(context.Background(), draftID,
 		fixtureID(t, "MANZA_FIXTURE_AUTHORIZABLE_AUTHORIZATION_ID"),
 		manza.Sign("replay-secret", input))
 	if err != nil {
@@ -361,11 +363,92 @@ func TestTransferDraftsAuthorize(t *testing.T) {
 	}
 }
 
-func TestTransferDraftsDecline(t *testing.T) {
-	server := startReplayServer(t, "transfer_drafts/decline")
+func TestPaymentsGetRefused(t *testing.T) {
+	server := startReplayServer(t, "payments/get_refused")
 	client := replayClient(t, server)
 
-	resp, err := client.TransferDrafts.Decline(context.Background(),
+	resp, err := client.Payments.Get(context.Background(), fixtureID(t, "MANZA_FIXTURE_REFUSED_DRAFT_ID"))
+	if err != nil {
+		t.Fatalf("payments get: %v", err)
+	}
+	var payment manza.TransferDraft
+	if err := resp.Decode(&payment); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if payment.ID != fixtureID(t, "MANZA_FIXTURE_REFUSED_DRAFT_ID") {
+		t.Fatalf("unexpected id %q", payment.ID)
+	}
+	if payment.Authorization == nil || payment.Authorization.Status != "refused" {
+		t.Fatalf("expected a refused authorization, got %#v", payment.Authorization)
+	}
+	if reason := payment.Authorization.RefusalReason; reason == nil || *reason != "over_transfer_limit" {
+		t.Fatalf("expected refusal_reason over_transfer_limit, got %v", reason)
+	}
+}
+
+// The fresh bank account was never trusted; with "Approve transfers to new
+// payees" on, the authorizer approves it and the signature trusts it.
+func TestPaymentsAuthorizeNewPayee(t *testing.T) {
+	server := startReplayServer(t, "payments/authorize_new_payee")
+	client := replayClient(t, server)
+
+	draftID := fixtureID(t, "MANZA_FIXTURE_NEW_PAYEE_DRAFT_ID")
+	payee, err := manza.PayeeFor(fixtureID(t, "MANZA_FIXTURE_EXTERNAL_ACCOUNT_ID"), "")
+	if err != nil {
+		t.Fatalf("payee: %v", err)
+	}
+	input := manza.SignatureInput(manza.TransferAuthorizationFields{
+		PaymentID:       draftID,
+		Nonce:           fixtureID(t, "MANZA_FIXTURE_NEW_PAYEE_NONCE"),
+		Amount:          "10.0",
+		CurrencyCode:    "MAD",
+		AccountID:       fixtureID(t, "MANZA_FIXTURE_ACCOUNT_ID"),
+		Payee:           payee,
+		ClientReference: fixtureID(t, "MANZA_FIXTURE_NEW_PAYEE_CLIENT_REFERENCE"),
+	})
+
+	resp, err := client.Payments.Authorize(context.Background(), draftID,
+		fixtureID(t, "MANZA_FIXTURE_NEW_PAYEE_AUTHORIZATION_ID"),
+		manza.Sign("replay-secret", input))
+	if err != nil {
+		t.Fatalf("authorize: %v", err)
+	}
+	var payment manza.TransferDraft
+	if err := resp.Decode(&payment); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if resp.Status != 200 || payment.ID != draftID {
+		t.Fatalf("expected 200 for %q, got %d for %q", draftID, resp.Status, payment.ID)
+	}
+	if payment.Authorization == nil || payment.Authorization.Status != "authorized" || payment.Authorization.RefusalReason != nil {
+		t.Fatalf("expected an authorized authorization without refusal_reason, got %#v", payment.Authorization)
+	}
+}
+
+// TransferDrafts is the deprecated alias of Payments: the same service, so it
+// calls /api/payments too.
+func TestTransferDraftsIsAnAliasOfPayments(t *testing.T) {
+	server := startReplayServer(t, "payments/get")
+	client := replayClient(t, server)
+
+	if client.TransferDrafts != client.Payments {
+		t.Fatal("expected TransferDrafts to be the Payments service")
+	}
+	var service *manza.TransferDraftsService = client.Payments
+	resp, err := service.Get(context.Background(), fixtureID(t, "MANZA_FIXTURE_TRANSFER_DRAFT_ID"))
+	if err != nil {
+		t.Fatalf("transfer drafts get: %v", err)
+	}
+	if _, ok := resp.Body["status"].(string); !ok {
+		t.Fatalf("expected string status, got %#v", resp.Body["status"])
+	}
+}
+
+func TestPaymentsDecline(t *testing.T) {
+	server := startReplayServer(t, "payments/decline")
+	client := replayClient(t, server)
+
+	resp, err := client.Payments.Decline(context.Background(),
 		fixtureID(t, "MANZA_FIXTURE_DECLINABLE_DRAFT_ID"),
 		fixtureID(t, "MANZA_FIXTURE_DECLINABLE_AUTHORIZATION_ID"),
 		"SDK fixture")
@@ -387,7 +470,7 @@ func TestTransferDraftsDecline(t *testing.T) {
 	}
 }
 
-func TestTransferDraftsDeclineOmitsAbsentReason(t *testing.T) {
+func TestPaymentsDeclineOmitsAbsentReason(t *testing.T) {
 	var got string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		raw, _ := io.ReadAll(r.Body)
@@ -397,7 +480,7 @@ func TestTransferDraftsDeclineOmitsAbsentReason(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	if _, err := replayClient(t, server).TransferDrafts.Decline(context.Background(), "d", "a", ""); err != nil {
+	if _, err := replayClient(t, server).Payments.Decline(context.Background(), "d", "a", ""); err != nil {
 		t.Fatalf("decline: %v", err)
 	}
 	if got != `{"authorization_id":"a"}` {
@@ -436,7 +519,7 @@ func TestBeneficiariesCreate(t *testing.T) {
 
 	resp, err := client.Beneficiaries.Create(context.Background(), manza.Attributes{
 		"beneficiary_type": "business",
-		"company_name":     "Zazu Fixture Beneficiary - spec (zazu-ruby-fixture)",
+		"company_name":     "Manza Fixture Beneficiary spec",
 		"email":            "fixture-beneficiary-spec@example.com",
 	})
 	if err != nil {
@@ -501,6 +584,25 @@ func TestBeneficiariesGetExternalAccount(t *testing.T) {
 	}
 }
 
+// Recorded after the new-payee authorize: its signature trusted the payee.
+func TestBeneficiariesGetExternalAccountTrusted(t *testing.T) {
+	server := startReplayServer(t, "beneficiaries/get_external_account_trusted")
+	client := replayClient(t, server)
+
+	resp, err := client.Beneficiaries.GetExternalAccount(context.Background(),
+		fixtureID(t, "MANZA_FIXTURE_CREATED_BENEFICIARY_ID"), fixtureID(t, "MANZA_FIXTURE_EXTERNAL_ACCOUNT_ID"))
+	if err != nil {
+		t.Fatalf("get external account: %v", err)
+	}
+	var account manza.ExternalAccount
+	if err := resp.Decode(&account); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if account.ID != fixtureID(t, "MANZA_FIXTURE_EXTERNAL_ACCOUNT_ID") || !account.Trusted {
+		t.Fatalf("expected the trusted account, got %#v", account)
+	}
+}
+
 func TestBeneficiariesCreateExternalAccount(t *testing.T) {
 	server := startReplayServer(t, "beneficiaries/create_external_account")
 	client := replayClient(t, server)
@@ -557,5 +659,51 @@ func TestPayeeTrustRequests(t *testing.T) {
 	}
 	if fetched.ID != id || fetched.ResolvedAt != nil {
 		t.Fatalf("unexpected trust request %#v", fetched)
+	}
+}
+
+func TestTransferAuthorizerGet(t *testing.T) {
+	server := startReplayServer(t, "transfer_authorizer/get")
+	client := replayClient(t, server)
+
+	resp, err := client.TransferAuthorizer.Get(context.Background())
+	if err != nil {
+		t.Fatalf("transfer authorizer get: %v", err)
+	}
+	if resp.Status != 200 {
+		t.Fatalf("expected 200, got %d", resp.Status)
+	}
+	for _, key := range []string{"per_transfer_limit", "daily_limit", "daily_authorized_total", "secret_expires_at", "webhook_endpoint_id", "enrolled_at"} {
+		if _, ok := resp.Body[key]; !ok {
+			t.Fatalf("expected a %s key in %#v", key, resp.Body)
+		}
+	}
+	var authorizer manza.TransferAuthorizer
+	if err := resp.Decode(&authorizer); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if authorizer.Status != "active" || authorizer.SuspensionReason != nil || authorizer.CurrencyCode != "MAD" {
+		t.Fatalf("unexpected authorizer %#v", authorizer)
+	}
+	if authorizer.PerTransferLimit == "" || authorizer.DailyLimit == "" || authorizer.DailyAuthorizedTotal == "" ||
+		authorizer.SecretExpiresAt == "" || authorizer.WebhookEndpointID == "" || authorizer.EnrolledAt == "" {
+		t.Fatalf("expected every field set, got %#v", authorizer)
+	}
+}
+
+func TestTransferAuthorizerGetNotEnrolled(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/api/transfer_authorizer" {
+			t.Errorf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{"error":{"type":"not_found_error","message":"No transfer authorizer is enrolled"}}`))
+	}))
+	t.Cleanup(server.Close)
+
+	_, err := replayClient(t, server).TransferAuthorizer.Get(context.Background())
+	var apiErr *manza.Error
+	if !errors.As(err, &apiErr) || apiErr.Kind != manza.KindNotFound {
+		t.Fatalf("expected a not_found *manza.Error, got %T (%v)", err, err)
 	}
 }

@@ -38,7 +38,7 @@ func SignatureInput(f TransferAuthorizationFields) string {
 
 // Sign returns the lowercase hex HMAC-SHA256 of signatureInput under the
 // authorizer endpoint's signing secret. Pass the result to
-// TransferDraftsService.Authorize.
+// PaymentsService.Authorize.
 func Sign(secret, signatureInput string) string {
 	mac := hmac.New(sha256.New, []byte(secret))
 	mac.Write([]byte(signatureInput))

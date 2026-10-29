@@ -43,8 +43,12 @@ type Client struct {
 	Invoices           *InvoicesService
 	PayeeTrustRequests *PayeeTrustRequestsService
 	PaymentLinks       *PaymentLinksService
-	TransferDrafts     *TransferDraftsService
-	WebhookEndpoints   *WebhookEndpointsService
+	Payments           *PaymentsService
+	TransferAuthorizer *TransferAuthorizerService
+	// Deprecated: use Payments. Kept for all of 1.x; it is the same service
+	// and calls /api/payments.
+	TransferDrafts   *TransferDraftsService
+	WebhookEndpoints *WebhookEndpointsService
 }
 
 // Option configures a Client.
@@ -93,7 +97,9 @@ func New(opts ...Option) (*Client, error) {
 	c.Invoices = &InvoicesService{client: c}
 	c.PayeeTrustRequests = &PayeeTrustRequestsService{client: c}
 	c.PaymentLinks = &PaymentLinksService{client: c}
-	c.TransferDrafts = &TransferDraftsService{client: c}
+	c.Payments = &PaymentsService{client: c}
+	c.TransferAuthorizer = &TransferAuthorizerService{client: c}
+	c.TransferDrafts = c.Payments
 	c.WebhookEndpoints = &WebhookEndpointsService{client: c}
 	return c, nil
 }
@@ -107,7 +113,7 @@ type Response struct {
 }
 
 // Decode unmarshals the raw response body into v, typically one of the
-// models in types.go (TransferDraft, CheckoutSession, ...).
+// models in types.go (TransferDraft, TransferAuthorizer, CheckoutSession, ...).
 func (r *Response) Decode(v any) error {
 	return json.Unmarshal(r.Raw, v)
 }

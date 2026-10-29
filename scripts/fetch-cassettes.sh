@@ -3,14 +3,14 @@
 # CI calls this before running tests so we don't have to commit cassettes
 # into both repos.
 #
-#   scripts/fetch-cassettes.sh            # the pinned release (v1.0.0)
+#   scripts/fetch-cassettes.sh            # the pinned release (v1.3.0)
 #   scripts/fetch-cassettes.sh v1.0.1     # specific tag
 #
 # Cassettes land under testdata/cassettes/.
 set -euo pipefail
 
 REPO="getmanza/manza-ruby"
-PINNED_TAG="v1.0.0" # bump on purpose: an unpinned latest tag lets one release break every SDK CI at once
+PINNED_TAG="v1.3.0" # bump on purpose: an unpinned latest tag lets one release break every SDK CI at once
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DEST="$ROOT/testdata/cassettes"
 

@@ -282,31 +282,49 @@ type payeeTrustRequestBody struct {
 	ExternalAccountIDs []string `json:"external_account_ids"`
 }
 
-// TransferDraftsService — API-initiated transfers. Creating a draft never
-// executes a transfer by itself. A draft inside the entity's
-// machine-authorization envelope (trusted payee, within limits) is sent to
-// the enrolled transfer authorizer as a `payment.authorization_requested`
+// PaymentsService — API-initiated transfers, called payments (formerly
+// transfer drafts; /api/transfer_drafts stays a server-side alias). Creating
+// a payment never executes a transfer by itself. A payment inside the
+// entity's machine-authorization envelope (trusted payee, or a new one when
+// "Approve transfers to new payees" is on, within limits) is sent to the
+// enrolled transfer authorizer as a `payment.authorization_requested`
 // webhook; answer it with Authorize or Decline, using an API key other than
-// the one that created the draft. Every other draft goes to the in-app
+// the one that created the payment. Every other payment goes to the in-app
 // approval flow, where a manager or legal representative approves it. Poll
 // Get (status: requested → processing → completed / failed) or subscribe to
 // the `transfer.executed` webhook to follow execution.
-type TransferDraftsService struct{ client *Client }
+//
+// A payment's `authorization` says which way it went: `pending` (a
+// challenge was sent), `authorized`, `declined` (the payment is deleted), or
+// an outcome that sends it to the in-app approvers with a `refusal_reason`:
+// `refused` (it did not qualify: `untrusted_payee`, `unrestricted_api_key`,
+// `over_new_payee_limit`, `over_transfer_limit`, `over_daily_limit`,
+// `currency_mismatch`, `suspended` or `secret_expired`), or `expired` /
+// `superseded` / `failed` (a challenge closed without an authorize:
+// `expired`, `stale` or `signature_failed`). It is null when no authorizer
+// was enrolled.
+type PaymentsService struct{ client *Client }
 
-// Create calls POST /api/transfer_drafts.
+// TransferDraftsService is the former name of PaymentsService.
+//
+// Deprecated: use PaymentsService (Client.Payments). Kept for all of 1.x; it
+// is the same type and calls /api/payments.
+type TransferDraftsService = PaymentsService
+
+// Create calls POST /api/payments.
 // Required: account_id, amount, and exactly one of beneficiary_id
 // (external transfer) or destination_account_id (own-account move).
 // Optional: external_account_id, currency_code, payment_reference,
 // internal_notes, client_reference (unique per entity, at most 128
 // characters; a duplicate returns a conflict *Error whose PaymentID names
-// the existing draft).
-func (s *TransferDraftsService) Create(ctx context.Context, attributes Attributes) (*Response, error) {
-	return s.client.post(ctx, "api/transfer_drafts", attributes)
+// the existing payment).
+func (s *PaymentsService) Create(ctx context.Context, attributes Attributes) (*Response, error) {
+	return s.client.post(ctx, "api/payments", attributes)
 }
 
-// Get calls GET /api/transfer_drafts/:id.
-func (s *TransferDraftsService) Get(ctx context.Context, id string) (*Response, error) {
-	return s.client.get(ctx, encodePath("api/transfer_drafts", id), nil)
+// Get calls GET /api/payments/:id.
+func (s *PaymentsService) Get(ctx context.Context, id string) (*Response, error) {
+	return s.client.get(ctx, encodePath("api/payments", id), nil)
 }
 
 type authorizeBody struct {
@@ -314,20 +332,22 @@ type authorizeBody struct {
 	Signature       string `json:"signature"`
 }
 
-// Authorize calls POST /api/transfer_drafts/:id/authorize.
+// Authorize calls POST /api/payments/:id/authorize.
 //
-// Executes the draft. authorizationID comes from the
+// Executes the payment. authorizationID comes from the
 // `payment.authorization_requested` webhook; build signature with
 // SignatureInput and Sign. Requires the `transfers:authorize` scope on a key
-// other than the draft's creator (otherwise a forbidden *Error of type
-// `same_key_forbidden`). A blank signature is refused locally with
-// *ArgumentError: the API counts it as a failed attempt, and five fail the
-// challenge.
-func (s *TransferDraftsService) Authorize(ctx context.Context, id, authorizationID, signature string) (*Response, error) {
+// other than the payment's creator (otherwise a forbidden *Error of type
+// `same_key_forbidden`), bound to an IP allowlist (otherwise forbidden
+// `unrestricted_api_key`). A conflict *Error of type `authorization_busy`
+// means a bank-detail edit, trust or trust revocation on the payee was in
+// flight: retry. A blank signature is refused locally with *ArgumentError:
+// the API counts it as a failed attempt, and five fail the challenge.
+func (s *PaymentsService) Authorize(ctx context.Context, id, authorizationID, signature string) (*Response, error) {
 	if strings.TrimSpace(signature) == "" {
 		return nil, &ArgumentError{Message: "signature cannot be blank"}
 	}
-	return s.client.post(ctx, encodePath("api/transfer_drafts", id, "authorize"),
+	return s.client.post(ctx, encodePath("api/payments", id, "authorize"),
 		authorizeBody{AuthorizationID: authorizationID, Signature: signature})
 }
 
@@ -336,14 +356,34 @@ type declineBody struct {
 	Reason          string `json:"reason,omitempty"`
 }
 
-// Decline calls POST /api/transfer_drafts/:id/decline.
+// Decline calls POST /api/payments/:id/decline.
 //
-// Declines the challenge and deletes the draft; the response is the
-// authorization (status "declined"). An empty reason is omitted from the
-// request.
-func (s *TransferDraftsService) Decline(ctx context.Context, id, authorizationID, reason string) (*Response, error) {
-	return s.client.post(ctx, encodePath("api/transfer_drafts", id, "decline"),
+// Declines the challenge and deletes the payment; the response is the
+// authorization (status "declined", a null refusal_reason). An empty reason
+// is omitted from the request.
+func (s *PaymentsService) Decline(ctx context.Context, id, authorizationID, reason string) (*Response, error) {
+	return s.client.post(ctx, encodePath("api/payments", id, "decline"),
 		declineBody{AuthorizationID: authorizationID, Reason: reason})
+}
+
+// TransferAuthorizerService — the entity's enrolled transfer authorizer,
+// read-only. Enrolment, limits, the "Approve transfers to new payees" option
+// and resume stay in the app behind a second factor. A singular resource: no
+// list, no id.
+type TransferAuthorizerService struct{ client *Client }
+
+// Get calls GET /api/transfer_authorizer.
+//
+// Any key with `transfers:read`, `transfers:write` or `transfers:authorize`.
+// Returns status (active / suspended), suspension_reason (member,
+// signature_failures, secret_expired, endpoint_disabled; null when active),
+// currency_code, per_transfer_limit, daily_limit, daily_authorized_total
+// (the last 24 hours), secret_expires_at, webhook_endpoint_id and
+// enrolled_at; decode it onto TransferAuthorizer. It does not show whether
+// new payees are approved. A not-found *Error means no authorizer is
+// enrolled.
+func (s *TransferAuthorizerService) Get(ctx context.Context) (*Response, error) {
+	return s.client.get(ctx, "api/transfer_authorizer", nil)
 }
 
 // WebhookEndpointsService — webhook endpoint management.

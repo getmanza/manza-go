@@ -39,3 +39,11 @@ jobs:
 
       - name: go test
         run: go test ./...
+
+      # The example is its own module (kept out of the published one), so
+      # ./... above does not reach it.
+      - name: example (go vet, go test)
+        working-directory: examples/transfer_authorizer
+        run: |
+          go vet ./...
+          go test ./...

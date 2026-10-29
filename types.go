@@ -15,14 +15,17 @@ const (
 	BeneficiaryTypeBusiness   = "business"
 )
 
-// Authorization is a machine-authorization challenge on a transfer draft,
-// and the response of TransferDraftsService.Decline.
+// Authorization is a machine-authorization challenge on a payment, and the
+// response of PaymentsService.Decline. RefusalReason is set when Status is
+// refused, expired, superseded or failed: the payment went to the in-app
+// approvers (see PaymentsService).
 type Authorization struct {
-	ID           string  `json:"id"`
-	Status       string  `json:"status"` // pending, authorized, declined, ...
-	ExpiresAt    string  `json:"expires_at"`
-	AuthorizedAt *string `json:"authorized_at,omitempty"`
-	DeclinedAt   *string `json:"declined_at,omitempty"`
+	ID            string  `json:"id"`
+	Status        string  `json:"status"` // pending, authorized, declined, refused, expired, superseded, failed
+	ExpiresAt     string  `json:"expires_at"`
+	AuthorizedAt  *string `json:"authorized_at,omitempty"`
+	DeclinedAt    *string `json:"declined_at,omitempty"`
+	RefusalReason *string `json:"refusal_reason,omitempty"`
 }
 
 // TransferRef is the executed transfer attached to an authorized draft.
@@ -31,7 +34,8 @@ type TransferRef struct {
 	Status string `json:"status"` // e.g. submitted
 }
 
-// TransferDraft is an API-initiated transfer.
+// TransferDraft is an API-initiated transfer (a payment): the response of
+// PaymentsService.Create, Get and Authorize.
 type TransferDraft struct {
 	ID                   string         `json:"id"`
 	Status               string         `json:"status"`
@@ -57,6 +61,8 @@ type ExternalAccount struct {
 	BankIdentifier string `json:"bank_identifier"`
 	CurrencyCode   string `json:"currency_code"`
 	Default        bool   `json:"default"`
+	// Trusted is true once the bank details are a trusted payee.
+	Trusted bool `json:"trusted"`
 }
 
 // Beneficiary is a saved transfer recipient.
@@ -68,6 +74,21 @@ type Beneficiary struct {
 	PhoneNumber      *string           `json:"phone_number"`
 	ExternalAccounts []ExternalAccount `json:"external_accounts"`
 	CreatedAt        string            `json:"created_at"`
+}
+
+// TransferAuthorizer is the entity's enrolled transfer authorizer, the
+// response of TransferAuthorizerService.Get. Limits and the total are the
+// API's decimal strings.
+type TransferAuthorizer struct {
+	Status               string  `json:"status"`            // active, suspended
+	SuspensionReason     *string `json:"suspension_reason"` // member, signature_failures, secret_expired, endpoint_disabled
+	CurrencyCode         string  `json:"currency_code"`
+	PerTransferLimit     string  `json:"per_transfer_limit"`
+	DailyLimit           string  `json:"daily_limit"`
+	DailyAuthorizedTotal string  `json:"daily_authorized_total"` // the last 24 hours
+	SecretExpiresAt      string  `json:"secret_expires_at"`
+	WebhookEndpointID    string  `json:"webhook_endpoint_id"`
+	EnrolledAt           string  `json:"enrolled_at"`
 }
 
 // PayeeTrustRequest is a request to trust payees for machine-authorized

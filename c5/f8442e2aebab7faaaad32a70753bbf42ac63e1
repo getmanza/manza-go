@@ -1,0 +1,24 @@
+cassette_test.go
+  s_65c3c5c5f93719::t_6d6cff154c6b61 8
+  s_65c3c5c5f93719::t_205ec7b8635ce1 207-209
+client.go
+  s_65c3c5c5f93719::t_0f71088cacb4b5 199-202,207
+CHANGELOG.md
+  s_65c3c5c5f93719::t_472f29bf841b2b 10-14
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "c5f8442e2aebab7faaaad32a70753bbf42ac63e1",
+  "prompts": {},
+  "sessions": {
+    "s_65c3c5c5f93719": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "bee1964f-92c4-4310-92b4-5e82d7d3d709",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}

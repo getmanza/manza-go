@@ -7,7 +7,7 @@ package manza_test
 //
 // Matching is method + path+query + semantic JSON body (Go's map marshaling
 // sorts keys, so byte-equality against Ruby's insertion-ordered bodies would
-// never hold). The transfer_drafts/authorize* cassettes match the body with
+// never hold). The payments/authorize* cassettes match the body with
 // `signature` removed: the recorded value is an HMAC over a real nonce under a
 // real secret (scrubbed to <SIGNATURE>) that replay cannot reproduce.
 //
@@ -75,6 +75,14 @@ var fixtureIDs = map[string]string{
 	// One-time nonce from the authorization webhook. Only needed while
 	// recording; it never appears in a request or response.
 	"MANZA_FIXTURE_AUTHORIZABLE_NONCE": "fixture-authorizable-nonce",
+	// Over the per-transfer limit, so refused at create time.
+	"MANZA_FIXTURE_REFUSED_DRAFT_ID": "fixture-refused-draft-id",
+	// 10.00 MAD to MANZA_FIXTURE_EXTERNAL_ACCOUNT_ID, bank details never
+	// trusted: the authorizer approves it and trusts the payee.
+	"MANZA_FIXTURE_NEW_PAYEE_DRAFT_ID":         "fixture-new-payee-draft-id",
+	"MANZA_FIXTURE_NEW_PAYEE_AUTHORIZATION_ID": "fixture-new-payee-authorization-id",
+	"MANZA_FIXTURE_NEW_PAYEE_NONCE":            "fixture-new-payee-nonce",
+	"MANZA_FIXTURE_NEW_PAYEE_CLIENT_REFERENCE": "fixture-new-payee-client-reference",
 }
 
 func fixtureID(t *testing.T, envVar string) string {
@@ -165,7 +173,7 @@ func startReplayServer(t *testing.T, names ...string) *httptest.Server {
 			if err != nil || recorded.Host != replayHost {
 				t.Fatalf("cassette %s: expected a %s request URI, got %q", name, replayHost, interaction.Request.URI)
 			}
-			interaction.ignoreSignature = strings.HasPrefix(name, "transfer_drafts/authorize")
+			interaction.ignoreSignature = strings.HasPrefix(name, "payments/authorize")
 			interactions = append(interactions, interaction)
 		}
 	}

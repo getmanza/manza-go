@@ -7,6 +7,8 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.1.0]
+
 Ports manza-ruby 1.1.0–1.3.0: the webhook verifier, the transfer-authorizer
 resource, payments as the canonical name for transfer drafts, and a runnable
 authorizer example. Cassettes are pinned to `cassettes-v1.3.0`.

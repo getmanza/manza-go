@@ -5,7 +5,7 @@ package manza_test
 // contract is enforced cross-language: every SDK that consumes the cassette
 // tarball must replay the exact request shape.
 //
-// Matching is method + path+query + semantic JSON body (Go's map marshaling
+// Matching is method + escaped path + query + semantic JSON body (Go's map marshaling
 // sorts keys, so byte-equality against Ruby's insertion-ordered bodies would
 // never hold). The payments/authorize* cassettes match the body with
 // `signature` removed: the recorded value is an HMAC over a real nonce under a
@@ -204,7 +204,9 @@ func matches(interaction cassetteInteraction, r *http.Request, body []byte) bool
 	if err != nil {
 		return false
 	}
-	if recorded.Path != r.URL.Path {
+	// The escaped path, not URL.Path: Go decodes %2F back to "/" in Path, so
+	// a request target of /api%2Fpayments/x would match /api/payments/x.
+	if recorded.EscapedPath() != r.URL.EscapedPath() {
 		return false
 	}
 	if !reflect.DeepEqual(recorded.Query(), r.URL.Query()) {

@@ -196,10 +196,13 @@ func (c *Client) delete(ctx context.Context, path string) (*Response, error) {
 	return c.Request(ctx, http.MethodDelete, path, nil, nil)
 }
 
-func encodePath(segments ...string) string {
+// encodePath joins a literal base path ("api/payments") with the escaped
+// segments after it. The base keeps its "/"; an id is escaped inside its own
+// segment, so "a/b" becomes "a%2Fb".
+func encodePath(base string, segments ...string) string {
 	escaped := make([]string, len(segments))
 	for i, s := range segments {
 		escaped[i] = url.PathEscape(s)
 	}
-	return strings.Join(escaped, "/")
+	return strings.Join(append([]string{base}, escaped...), "/")
 }

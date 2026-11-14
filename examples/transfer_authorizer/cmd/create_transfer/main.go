@@ -14,8 +14,8 @@ import (
 	"os"
 	"path/filepath"
 
-	manza "github.com/getmanza/manza-go"
 	transferauthorizer "github.com/getmanza/manza-go/examples/transfer_authorizer"
+	manza "github.com/getmanza/manza-go/v2"
 )
 
 func main() {

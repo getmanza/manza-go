@@ -3,11 +3,11 @@
 Go SDK for the Manza API.
 
 ```bash
-go get github.com/getmanza/manza-go
+go get github.com/getmanza/manza-go/v2
 ```
 
 ```go
-import manza "github.com/getmanza/manza-go"
+import manza "github.com/getmanza/manza-go/v2"
 
 client, err := manza.New(manza.WithAPIKey(os.Getenv("MANZA_API_KEY")))
 if err != nil { ... }
@@ -281,7 +281,7 @@ go test ./...
 | Ruby (reference implementation, records the cassettes) | [getmanza/manza-ruby](https://github.com/getmanza/manza-ruby) | `gem "manza"` |
 | TypeScript / JavaScript | [getmanza/manza-ts](https://github.com/getmanza/manza-ts) | `npm install @getmanza/sdk` |
 | Python | [getmanza/manza-python](https://github.com/getmanza/manza-python) | `pip install manza` |
-| Go | [getmanza/manza-go](https://github.com/getmanza/manza-go) (this repo) | `go get github.com/getmanza/manza-go` |
+| Go | [getmanza/manza-go](https://github.com/getmanza/manza-go) (this repo) | `go get github.com/getmanza/manza-go/v2` |
 | PHP | [getmanza/manza-php](https://github.com/getmanza/manza-php) | `composer require manza/manza-php` |
 | Rust | [getmanza/manza-rust](https://github.com/getmanza/manza-rust) | `cargo add manza` |
 | Crystal | [getmanza/manza-crystal](https://github.com/getmanza/manza-crystal) | shard `manza` (`github: getmanza/manza-crystal`) |

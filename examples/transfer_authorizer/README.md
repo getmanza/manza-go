@@ -11,7 +11,7 @@ Two processes and a shared ledger, matching the two-key model of [transfer autho
 
 Since manza-go 2.0 every ledger entry records the payment's `transfer_method`, which the v2 signature signs. An entry written by the 1.x example has none, which reads as empty: it still matches a payment whose `transfer_method` is null (a market with no rail choice), but the authorizer declines a payment that carries one as a mismatch. Let open challenges finish (or expire) before upgrading, or add `"transfer_method"` from `Payments.Get` to those entries.
 
-It is its own Go module (`go.mod` here, with a `replace` onto this checkout of the SDK), so it is not part of the published `github.com/getmanza/manza-go` module. It uses the standard library only.
+It is its own Go module (`go.mod` here, with a `replace` onto this checkout of the SDK), so it is not part of the published `github.com/getmanza/manza-go/v2` module. It uses the standard library only.
 
 ## Setup
 

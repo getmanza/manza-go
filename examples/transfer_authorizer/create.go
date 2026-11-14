@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"io"
 
-	manza "github.com/getmanza/manza-go"
+	manza "github.com/getmanza/manza-go/v2"
 )
 
 // Transfer is what cmd/create_transfer asks the API to pay.

@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	manza "github.com/getmanza/manza-go"
+	manza "github.com/getmanza/manza-go/v2"
 )
 
 const secretMinDays = 7

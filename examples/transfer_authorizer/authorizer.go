@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"time"
 
-	manza "github.com/getmanza/manza-go"
+	manza "github.com/getmanza/manza-go/v2"
 )
 
 // Event is the only webhook event the authorizer answers.

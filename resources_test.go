@@ -14,7 +14,7 @@ import (
 	"strings"
 	"testing"
 
-	manza "github.com/getmanza/manza-go"
+	manza "github.com/getmanza/manza-go/v2"
 )
 
 func replayClient(t *testing.T, server *httptest.Server) *manza.Client {

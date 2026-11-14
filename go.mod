@@ -1,4 +1,4 @@
-module github.com/getmanza/manza-go
+module github.com/getmanza/manza-go/v2
 
 go 1.24
 

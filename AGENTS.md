@@ -14,13 +14,13 @@ Go SDK for the Manza API. This SDK **replays manza-ruby's cassettes**; it never 
 | Cassette replay (tests) | `httptest.Server` + `gopkg.in/yaml.v3` | `cassette_test.go`. Reads manza-ruby's release tarball from `testdata/cassettes/` (gitignored) |
 | Format | `gofmt` | CI fails on any file `gofmt -l .` prints |
 | Lint / type-check | `go vet ./...` | No golangci-lint, no separate typechecker (the compiler is it) |
-| Package registry | none | The Go module proxy indexes git tags (`proxy.golang.org`, `pkg.go.dev`). Module path is `github.com/getmanza/manza-go` (1.0.0 needs no `/v2` suffix) |
+| Package registry | none | The Go module proxy indexes git tags (`proxy.golang.org`, `pkg.go.dev`). Module path is `github.com/getmanza/manza-go/v2` since 2.0.0 (Go requires the major-version suffix from v2 on; 1.x is `github.com/getmanza/manza-go`) |
 | Release | `bin/release` | manza SDK release kit (byte-identical across SDK repos; repo-specific bits in `scripts/version` + `scripts/release-check`) |
 
 ## Public API surface
 
 ```go
-client, err := manza.New(manza.WithAPIKey("sk_live_...")) // or MANZA_API_KEY
+client, err := manza.New(manza.WithAPIKey("sk_live_...")) // import manza "github.com/getmanza/manza-go/v2"; or MANZA_API_KEY
 
 resp, err := client.Entity.Get(ctx)
 page, err := client.Accounts.List(ctx, manza.AccountListParams{CurrencyCode: "MAD"})
@@ -84,7 +84,7 @@ if errors.As(err, &apiErr) && apiErr.Kind == manza.KindConflict {
 - **Error model is shared across the SDK family.** Adding an error class or `Kind` means coordinating manza-ruby and manza-ts at minimum. `KindConflict` represents 409 responses. `Kind` string values are part of the contract.
 - **Signer.** `SignatureInput` and `Sign` must keep reproducing the three fixed v2 vectors in `transfer_authorization_test.go`, the same vectors as manza-ruby's `spec/manza/transfer_authorization_spec.rb`. Never sign the server's `signature_input_v2` blindly: build it from your own record of the transfer, and pass `amount` verbatim (`"2500.0"`).
 - **Release.** `bin/release` is byte-identical across the SDK repos and is never edited in place. A tag whose version differs from `Version` in `client.go` fails `release.yml`'s tag == `Version` gate, so a new version always goes through `bin/release` (it updates `Version` via `scripts/version`). Repo-specific logic lives in `scripts/version` (the `Version` constant in `client.go`) and `scripts/release-check`. `release.yml` gates on tag == `Version`. There is no registry token or trusted-publishing environment: a Go module's version is its git tag and the proxy indexes it. If a registry is ever added, its trusted-publisher binding must name `getmanza/manza-go`.
-- **The repo lives at `getmanza/manza-go`** (renamed from `zazu-go`). Remotes and URLs must say `getmanza`; the module path is `github.com/getmanza/manza-go`.
+- **The repo lives at `getmanza/manza-go`** (renamed from `zazu-go`). Remotes and URLs must say `getmanza`; the module path is `github.com/getmanza/manza-go/v2`.
 - **Never escape backticks in PR bodies.** With `<<'EOF'` (single-quoted heredoc) the shell passes everything through verbatim. Typing `` \` `` produces literal `` \` `` in the rendered PR. See "PR descriptions" below.
 
 ## PR descriptions
@@ -213,6 +213,6 @@ If the contract breaks (new request shape, new error kind), it is a coordinated 
 ## Repository links
 
 - This repo: https://github.com/getmanza/manza-go
-- Go package docs (module proxy, no registry): https://pkg.go.dev/github.com/getmanza/manza-go
+- Go package docs (module proxy, no registry): https://pkg.go.dev/github.com/getmanza/manza-go/v2
 - Reference implementation: https://github.com/getmanza/manza-ruby
 - TypeScript SDK: https://github.com/getmanza/manza-ts

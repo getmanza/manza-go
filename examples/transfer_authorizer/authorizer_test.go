@@ -14,8 +14,8 @@ import (
 	"testing"
 	"time"
 
-	manza "github.com/getmanza/manza-go"
 	transferauthorizer "github.com/getmanza/manza-go/examples/transfer_authorizer"
+	manza "github.com/getmanza/manza-go/v2"
 )
 
 // Drives the example's authorizer with a signed copy of the documented

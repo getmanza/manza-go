@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	manza "github.com/getmanza/manza-go"
+	manza "github.com/getmanza/manza-go/v2"
 )
 
 // Fixed test vector, shared by every SDK in the family (see

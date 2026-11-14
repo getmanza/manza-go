@@ -37,7 +37,6 @@ major release: see Migrating from 1.x below.
 
 ### Fixed
 
-
 - Typed by-id and action calls (`Payments.Get`/`Authorize`/`Decline`, `Customers.Get`/`Update`/`Delete`, `Invoices.*`, `WebhookEndpoints.*`, `Accounts.Get`, `Beneficiaries.Get`, …) sent `/api%2F<resource>/<id>` because the base path's `/` was escaped. They now send `/api/<resource>/<id>`; ids stay escaped inside their own segment (`a/b` → `a%2Fb`) (#14)
 - The cassette replay matcher compares the escaped request path instead of Go's decoded `URL.Path`, so a `%2F` in the request target no longer matches a recorded `/`
 

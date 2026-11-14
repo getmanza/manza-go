@@ -26,6 +26,9 @@ type Entry struct {
 	CurrencyCode string `json:"currency_code"`
 	AccountID    string `json:"account_id"`
 	Payee        string `json:"payee"`
+	// TransferMethod is the create response's transfer_method, empty where
+	// the market offers no choice (null): the v2 signature signs it.
+	TransferMethod string `json:"transfer_method"`
 }
 
 // Ledger is your own record of the transfers you created, keyed by the
@@ -35,7 +38,7 @@ type Entry struct {
 //
 //	{ "po_8812": { "payment_id": "...", "amount": "2500.0",
 //	               "currency_code": "MAD", "account_id": "...",
-//	               "payee": "ext:..." } }
+//	               "payee": "ext:...", "transfer_method": "standard" } }
 type Ledger struct{ path string }
 
 // NewLedger returns the ledger stored at path.

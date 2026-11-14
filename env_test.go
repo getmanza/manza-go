@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	manza "github.com/getmanza/manza-go"
+	manza "github.com/getmanza/manza-go/v2"
 )
 
 func clearEnv(t *testing.T) {

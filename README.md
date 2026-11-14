@@ -3,11 +3,11 @@
 Go SDK for the Manza API.
 
 ```bash
-go get github.com/getmanza/manza-go
+go get github.com/getmanza/manza-go/v2
 ```
 
 ```go
-import manza "github.com/getmanza/manza-go"
+import manza "github.com/getmanza/manza-go/v2"
 
 client, err := manza.New(manza.WithAPIKey(os.Getenv("MANZA_API_KEY")))
 if err != nil { ... }
@@ -26,6 +26,18 @@ payment, err := client.Payments.Create(ctx, manza.Attributes{
     "beneficiary_id":    beneficiaryID,
     "amount":            "150.00",
     "payment_reference": "INV-000042",
+    "transfer_method":   manza.TransferMethodStandard, // optional rail: eft/rtc (ZA), standard/instant (MA); omitted → the default
+})
+
+// An invoice is paid into one of your accounts: account_id is required.
+invoice, err := client.Invoices.Create(ctx, manza.Attributes{
+    "customer_id":           customerID,
+    "account_id":            accountID,
+    "currency_code":         "MAD",
+    "issue_date":            issueDate, // YYYY-MM-DD, not in a month before your newest numbered invoice
+    "due_date":              dueDate,
+    "generate_payment_link": true, // a card payment link, made when approved (payment_links:write)
+    "items":                 []map[string]any{{"description": "Consulting", "quantity": 10, "unit_price": "150.00"}},
 })
 ```
 
@@ -38,7 +50,7 @@ Response bodies are returned as-is from the API — `snake_case` keys in a
 For typed access, decode the raw body onto a model from `types.go`
 (`TransferDraft`, `Authorization`, `TransferAuthorizer`, `Beneficiary`,
 `ExternalAccount`, `PayeeTrustRequest`, `CheckoutSession`, `PaymentLink`,
-`Customer`, `Invoice`):
+`Customer`, `Invoice` with its embedded `InvoiceAccount`):
 
 ```go
 var draft manza.TransferDraft
@@ -58,6 +70,18 @@ outside Morocco, so they are pointers and `nil` there.
 Override with `manza.WithBaseURL(...)` or `MANZA_BASE_URL` (the legacy `ZAZU_BASE_URL` still works, with a one-time deprecation warning). The replay
 cassettes were recorded against `https://ma.manza.dev` (the staging host).
 
+## Versioning the API contract
+
+```go
+client, err := manza.New(manza.WithAPIKey("..."), manza.WithAPIVersion("2026-11-13"))
+```
+
+Or via env: `MANZA_API_VERSION=2026-11-13`. Unpinned, the API answers with
+its current version. manza-go 2.x signs transfer authorizations v2, which the
+API verifies for unpinned requests and requests pinned to `2026-11-13` or
+later; a client pinned to `2026-03-27` must stay on manza-go 1.x. The value
+is sent as the `Manza-Version` header on every request.
+
 ## Resources
 
 | Service | Methods |
@@ -67,11 +91,11 @@ cassettes were recorded against `https://ma.manza.dev` (the staging host).
 | `CheckoutSessions` | `Create`, `Get` |
 | `Customers` | `List`, `Get`, `Create`, `Update`, `Delete` |
 | `Entity` | `Get` |
-| `Invoices` | `List`, `Get`, `Create`, `Update`, `Send`, `MarkAsPaid`, `Cancel`, `CreditNote`, `Delete`, `CreatePaymentLink` |
+| `Invoices` | `List`, `Get`, `Create`, `Update`, `Send`, `MarkAsPaid`, `Cancel`, `CreditNote`, `Delete` (`Create`/`Update` take `account_id` and `generate_payment_link`) |
 | `PayeeTrustRequests` | `Create(ctx, externalAccountIDs)`, `Get` |
 | `PaymentLinks` | `List`, `Get`, `Create`, `Cancel` |
-| `Payments` | `Create`, `Get` (`authorization`: status, `refusal_reason`), `Authorize`, `Decline` |
-| `TransferAuthorizer` | `Get` (status, `suspension_reason`, limits, `daily_authorized_total`; a not-found `*manza.Error` when none is enrolled) |
+| `Payments` | `Create` (optional `transfer_method`), `Get` (`authorization`: status, `refusal_reason`), `Authorize`, `Decline` |
+| `TransferAuthorizer` | `Get` (status, `suspension_reason`, limits, `daily_authorized_total`, `trust_new_payees`, `new_payee_limit`; a not-found `*manza.Error` when none is enrolled) |
 | `TransferDrafts` | Deprecated alias of `Payments` (the same service; it calls `/api/payments`) |
 | `WebhookEndpoints` | `List`, `Get`, `Create`, `Update`, `Delete`, `Test`, `RegenerateSecret`, `Enable`, `Disable` |
 
@@ -108,8 +132,8 @@ explain every step.
    _, err := client.PayeeTrustRequests.Create(ctx, []string{"01a1..."})
    ```
 
-   `Trusted` on the `ExternalAccount` from `client.Beneficiaries.GetExternalAccount` says which it is. The API does not show whether the option is on.
-7. **Run the preflight, then the example** (from `examples/transfer_authorizer/`, after filling in `.env`): `go run ./cmd/preflight` checks what the API shows of steps 1–6 and prints a fix for each that fails. What it cannot see, check by hand: that key B is bound to an IP allowlist, and, for a payee not trusted yet, that *Approve transfers to new payees* is on and key A is bound to an IP allowlist too (it warns, it does not fail). Then `go run ./cmd/authorizer` in one terminal, `go run ./cmd/create_transfer` in another.
+   `Trusted` on the `ExternalAccount` from `client.Beneficiaries.GetExternalAccount` says which it is; `TrustNewPayees` (and `NewPayeeLimit`) on the `TransferAuthorizer` from `client.TransferAuthorizer.Get` says whether the option is on.
+7. **Run the preflight, then the example** (from `examples/transfer_authorizer/`, after filling in `.env`): `go run ./cmd/preflight` checks what the API shows of steps 1–6 and prints a fix for each that fails. What it cannot see, check by hand: that key B is bound to an IP allowlist, and, for a payee not trusted yet, that *Approve transfers to new payees* is on (`trust_new_payees` from `client.TransferAuthorizer.Get`) and key A is bound to an IP allowlist too (it warns, it does not fail). Then `go run ./cmd/authorizer` in one terminal, `go run ./cmd/create_transfer` in another.
 8. **Troubleshooting**: a payment that goes to your approvers instead has an `authorization` with status `refused` and a `refusal_reason` (`cmd/create_transfer` prints it in words); `client.TransferAuthorizer.Get` shows a suspension and its `suspension_reason`. An authorize answered 409 `authorization_busy` (a bank-detail edit, trust or trust revocation on the same payee was in flight) is safe to retry. The reasons, and an API error's `Type`, are in the [transfer authorization docs](https://ma.manza.finance/docs/api/transfer-authorization).
 
 ### Verifying the webhook
@@ -156,14 +180,19 @@ delivery can replay it.
 ### Signing the challenge
 
 Sign the payment from **your own record** of it (not the webhook's
-`signature_input`, which is there only to compare against) with the
-endpoint's signing secret, and answer with key B:
+`signature_input_v2`, which is there only to compare against) with the
+endpoint's signing secret, and answer with key B. The SDK builds the v2
+input (`manza.transfer-authorization.v2`), which ends with the payment's
+`transfer_method` (an empty segment when it is `null`). The webhook's
+`signature_input` is the v1 string, verified only for clients pinned to
+`Manza-Version: 2026-03-27`: those stay on manza-go 1.x.
 
 ```go
 // payment is a manza.TransferDraft (decoded via resp.Decode) or your own record.
-// Its ExternalAccountID, DestinationAccountID and ClientReference are *string:
-// exactly one of the first two is set, and ClientReference is nil for a
-// transfer without a client_reference.
+// Its ExternalAccountID, DestinationAccountID, ClientReference and
+// TransferMethod are *string: exactly one of the first two is set,
+// ClientReference is nil for a transfer without a client_reference, and
+// TransferMethod is nil where the market offers no rail choice.
 externalAccountID, destinationAccountID := "", ""
 if payment.ExternalAccountID != nil {
     externalAccountID = *payment.ExternalAccountID
@@ -175,9 +204,12 @@ payee, err := manza.PayeeFor(externalAccountID, destinationAccountID)
 if err != nil {
     return err
 }
-clientReference := ""
+clientReference, transferMethod := "", ""
 if payment.ClientReference != nil {
     clientReference = *payment.ClientReference
+}
+if payment.TransferMethod != nil {
+    transferMethod = *payment.TransferMethod
 }
 input := manza.SignatureInput(manza.TransferAuthorizationFields{
     PaymentID:       payment.ID,
@@ -187,6 +219,7 @@ input := manza.SignatureInput(manza.TransferAuthorizationFields{
     AccountID:       payment.AccountID,
     Payee:           payee,
     ClientReference: clientReference, // "" when the transfer has none
+    TransferMethod:  transferMethod,  // always from your record; "" only when the API returned null
 })
 signature := manza.Sign(signingSecret, input) // lowercase hex HMAC-SHA256
 
@@ -200,16 +233,23 @@ signature returns a `KindValidation` error of `Type` `invalid_signature`;
 five on one challenge send the payment to your in-app approvers, five in a
 row suspend the authorizer. `Create` accepts an optional `client_reference`
 (at most 128 characters, unique per entity); a duplicate returns a conflict
-error carrying the existing payment's `PaymentID`.
+error carrying the existing payment's `PaymentID`. A valid signature on a
+transfer over its rail's limit returns a `KindValidation` error of `Type`
+`state_error`: nothing moved, the authorization is `superseded` with
+`refusal_reason` `rail_limit_exceeded`, and the payment went to your
+approvers.
 
 ## Errors
 
 Non-2xx responses come back as `*manza.Error` with `Status`, `Kind`
 (`manza.KindAuthentication`, `KindForbidden`, `KindNotFound`,
-`KindValidation` for 400 and 422, `KindConflict` for 409, `KindRateLimit`,
+`KindValidation` for 400 and any other 422, `KindPlanLimitReached` for a 422 whose
+`Type` is `plan_limit_reached`, `KindConflict` for 409, `KindRateLimit`,
 `KindServer`, `KindAPI`), the API's `Type`/`Message`/`Param`, and the
-`RequestID`. A conflict also carries `PaymentID`. Discriminate on `Kind`,
-not on status codes:
+`RequestID`. A conflict also carries `PaymentID`; a plan limit carries
+`LimitKind` (what is capped, e.g. `invoices`), `LimitCurrent` and `LimitMax`,
+and retrying it before the plan changes or its period rolls over does not
+help. Discriminate on `Kind`, not on status codes:
 
 ```go
 var apiErr *manza.Error
@@ -242,7 +282,7 @@ go test ./...
 | Ruby (reference implementation, records the cassettes) | [getmanza/manza-ruby](https://github.com/getmanza/manza-ruby) | `gem "manza"` |
 | TypeScript / JavaScript | [getmanza/manza-ts](https://github.com/getmanza/manza-ts) | `npm install @getmanza/sdk` |
 | Python | [getmanza/manza-python](https://github.com/getmanza/manza-python) | `pip install manza` |
-| Go | [getmanza/manza-go](https://github.com/getmanza/manza-go) (this repo) | `go get github.com/getmanza/manza-go` |
+| Go | [getmanza/manza-go](https://github.com/getmanza/manza-go) (this repo) | `go get github.com/getmanza/manza-go/v2` |
 | PHP | [getmanza/manza-php](https://github.com/getmanza/manza-php) | `composer require manza/manza-php` |
 | Rust | [getmanza/manza-rust](https://github.com/getmanza/manza-rust) | `cargo add manza` |
 | Crystal | [getmanza/manza-crystal](https://github.com/getmanza/manza-crystal) | shard `manza` (`github: getmanza/manza-crystal`) |

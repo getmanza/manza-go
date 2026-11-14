@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"time"
 
-	manza "github.com/getmanza/manza-go"
+	manza "github.com/getmanza/manza-go/v2"
 )
 
 // Event is the only webhook event the authorizer answers.
@@ -28,13 +28,17 @@ const (
 )
 
 // checkedFields maps a ledger field to the webhook's `data.payment` field.
-// All must match.
-var checkedFields = []struct{ ledger, webhook string }{
-	{"payment_id", "id"},
-	{"amount", "amount"},
-	{"currency_code", "currency_code"},
-	{"account_id", "account_id"},
-	{"payee", "payee"},
+// All must match. A nullable field's null matches an empty ledger value.
+var checkedFields = []struct {
+	ledger, webhook string
+	nullable        bool
+}{
+	{"payment_id", "id", false},
+	{"amount", "amount", false},
+	{"currency_code", "currency_code", false},
+	{"account_id", "account_id", false},
+	{"payee", "payee", false},
+	{"transfer_method", "transfer_method", true},
 }
 
 // App answers `payment.authorization_requested` webhooks with key B (the
@@ -169,7 +173,7 @@ func (a *App) check(data map[string]any) error {
 	}
 
 	a.logf("INFO", "ledger match for %s: %v %v to %v", clientReference, payment["amount"], payment["currency_code"], payment["payee"])
-	return a.authorize(entry, authorization, clientReference, data["signature_input"])
+	return a.authorize(entry, authorization, clientReference, data["signature_input_v2"])
 }
 
 func (a *App) waitForEntry(clientReference string) (Entry, bool, error) {
@@ -186,10 +190,13 @@ func (a *App) waitForEntry(clientReference string) (Entry, bool, error) {
 func mismatchReason(entry Entry, payment map[string]any) string {
 	recorded := map[string]string{
 		"payment_id": entry.PaymentID, "amount": entry.Amount, "currency_code": entry.CurrencyCode,
-		"account_id": entry.AccountID, "payee": entry.Payee,
+		"account_id": entry.AccountID, "payee": entry.Payee, "transfer_method": entry.TransferMethod,
 	}
 	for _, field := range checkedFields {
 		if got, ok := payment[field.webhook].(string); ok && got == recorded[field.ledger] {
+			continue
+		}
+		if field.nullable && payment[field.webhook] == nil && recorded[field.ledger] == "" {
 			continue
 		}
 		return fmt.Sprintf("%s differs from the ledger (ledger %q, webhook %s)",
@@ -198,8 +205,9 @@ func mismatchReason(entry Entry, payment map[string]any) string {
 	return ""
 }
 
-// authorize signs from the ledger, never from the webhook: `signature_input`
-// in the webhook is only there to compare against.
+// authorize signs from the ledger, never from the webhook: `signature_input_v2`
+// in the webhook is only there to compare against. (Its `signature_input` is
+// the v1 string, for clients pinned to Manza-Version 2026-03-27.)
 func (a *App) authorize(entry Entry, authorization map[string]any, clientReference string, webhookInput any) error {
 	input := manza.SignatureInput(manza.TransferAuthorizationFields{
 		PaymentID:       entry.PaymentID,
@@ -209,6 +217,7 @@ func (a *App) authorize(entry Entry, authorization map[string]any, clientReferen
 		AccountID:       entry.AccountID,
 		Payee:           entry.Payee,
 		ClientReference: clientReference,
+		TransferMethod:  entry.TransferMethod,
 	})
 	// A signature over a different input is sure to fail, and failed attempts
 	// count toward suspending the authorizer. Leave the challenge unanswered

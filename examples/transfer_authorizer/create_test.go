@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	manza "github.com/getmanza/manza-go"
 	transferauthorizer "github.com/getmanza/manza-go/examples/transfer_authorizer"
+	manza "github.com/getmanza/manza-go/v2"
 )
 
 func createTransfer(t *testing.T, responses ...stubResponse) (*stubAPI, *transferauthorizer.Ledger, string, error) {
@@ -30,7 +30,7 @@ func createTransfer(t *testing.T, responses ...stubResponse) (*stubAPI, *transfe
 func TestCreateTransferRecordsThePaymentFromTheResponse(t *testing.T) {
 	api, ledger, out, err := createTransfer(t, stubResponse{status: 201, body: `{"id":"pay_1","amount":"10.0",` +
 		`"currency_code":"MAD","account_id":"acc","external_account_id":"ext_1","destination_account_id":null,` +
-		`"authorization":{"status":"pending"}}`})
+		`"transfer_method":"standard","authorization":{"status":"pending"}}`})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -44,7 +44,8 @@ func TestCreateTransferRecordsThePaymentFromTheResponse(t *testing.T) {
 	if err != nil || !found {
 		t.Fatalf("expected a ledger entry, got %v %v", found, err)
 	}
-	want := transferauthorizer.Entry{PaymentID: "pay_1", Amount: "10.0", CurrencyCode: "MAD", AccountID: "acc", Payee: "ext:ext_1"}
+	want := transferauthorizer.Entry{PaymentID: "pay_1", Amount: "10.0", CurrencyCode: "MAD", AccountID: "acc", Payee: "ext:ext_1",
+		TransferMethod: "standard"}
 	if entry != want {
 		t.Fatalf("entry %#v, want %#v", entry, want)
 	}

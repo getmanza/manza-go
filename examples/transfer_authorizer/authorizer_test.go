@@ -14,13 +14,14 @@ import (
 	"testing"
 	"time"
 
-	manza "github.com/getmanza/manza-go"
 	transferauthorizer "github.com/getmanza/manza-go/examples/transfer_authorizer"
+	manza "github.com/getmanza/manza-go/v2"
 )
 
 // Drives the example's authorizer with a signed copy of the documented
 // `payment.authorization_requested` payload (getmanza/app
-// WebhookEvents::PaymentAuthorizationRequested.example_payload, verbatim),
+// WebhookEvents::PaymentAuthorizationRequested.example_payload, verbatim,
+// with v2's `signature_input_v2` and `payment.transfer_method`),
 // against a stubbed Manza API. No cassette, no network: the same cases as
 // manza-ruby's spec/examples/transfer_authorizer_spec.rb.
 
@@ -30,9 +31,12 @@ const (
 	authorizationID = "01958e51-7c5a-7000-8000-000000000011"
 	nonce           = "9f86d081884c7d659a2feaa0c55ad015"
 	payeeToken      = "ext:01958e51-7c5a-7000-8000-000000000014"
-	webhookInput    = "manza.transfer-authorization.v1|01958e51-7c5a-7000-8000-000000000012|" +
+	webhookInputV1  = "manza.transfer-authorization.v1|01958e51-7c5a-7000-8000-000000000012|" +
 		"9f86d081884c7d659a2feaa0c55ad015|2500.0|ZAR|01958e51-7c5a-7000-8000-000000000013|" +
 		"ext:01958e51-7c5a-7000-8000-000000000014|po_8812"
+	webhookInput = "manza.transfer-authorization.v2|01958e51-7c5a-7000-8000-000000000012|" +
+		"9f86d081884c7d659a2feaa0c55ad015|2500.0|ZAR|01958e51-7c5a-7000-8000-000000000013|" +
+		"ext:01958e51-7c5a-7000-8000-000000000014|po_8812|eft"
 	authorizePath = "/api/payments/" + draftID + "/authorize"
 	declinePath   = "/api/payments/" + draftID + "/decline"
 )
@@ -60,20 +64,23 @@ func examplePayload() map[string]any {
 				"destination_account_id": nil,
 				"payment_reference":      "INV-2026-001",
 				"client_reference":       "po_8812",
+				"transfer_method":        "eft",
 				"payee_trusted":          false,
 			},
-			"signature_input": webhookInput,
+			"signature_input":    webhookInputV1,
+			"signature_input_v2": webhookInput,
 		},
 	}
 }
 
 func ledgerEntry() transferauthorizer.Entry {
 	return transferauthorizer.Entry{
-		PaymentID:    draftID,
-		Amount:       "2500.0",
-		CurrencyCode: "ZAR",
-		AccountID:    "01958e51-7c5a-7000-8000-000000000013",
-		Payee:        payeeToken,
+		PaymentID:      draftID,
+		Amount:         "2500.0",
+		CurrencyCode:   "ZAR",
+		AccountID:      "01958e51-7c5a-7000-8000-000000000013",
+		Payee:          payeeToken,
+		TransferMethod: "eft",
 	}
 }
 
@@ -229,8 +236,19 @@ func expectedSignature() string {
 	entry := ledgerEntry()
 	return manza.Sign(secret, manza.SignatureInput(manza.TransferAuthorizationFields{
 		PaymentID: entry.PaymentID, Nonce: nonce, Amount: entry.Amount, CurrencyCode: entry.CurrencyCode,
-		AccountID: entry.AccountID, Payee: entry.Payee, ClientReference: "po_8812",
+		AccountID: entry.AccountID, Payee: entry.Payee, ClientReference: "po_8812", TransferMethod: entry.TransferMethod,
 	}))
+}
+
+func TestAuthorizerSignsTheWebhooksV2Input(t *testing.T) {
+	entry := ledgerEntry()
+	input := manza.SignatureInput(manza.TransferAuthorizationFields{
+		PaymentID: entry.PaymentID, Nonce: nonce, Amount: entry.Amount, CurrencyCode: entry.CurrencyCode,
+		AccountID: entry.AccountID, Payee: entry.Payee, ClientReference: "po_8812", TransferMethod: entry.TransferMethod,
+	})
+	if input != webhookInput {
+		t.Fatalf("signature input\n got %s\nwant %s", input, webhookInput)
+	}
 }
 
 func TestAuthorizerSignsFromTheLedgerAndAuthorizesWithKeyB(t *testing.T) {
@@ -270,7 +288,7 @@ func TestAuthorizerDoesNotAuthorizeWhenTheWebhookSignatureInputDiffers(t *testin
 	h := newHarness(t, true)
 	h.record(t, ledgerEntry())
 	payload := examplePayload()
-	payload["data"].(map[string]any)["signature_input"] = "something-else"
+	payload["data"].(map[string]any)["signature_input_v2"] = "something-else"
 
 	h.deliver(t, payload)
 
@@ -446,6 +464,46 @@ func TestAuthorizerDeclinesALedgerMismatchNamingTheField(t *testing.T) {
 		t.Fatalf("expected no authorize, got %d", n)
 	}
 	h.expectLog(t, "declined")
+}
+
+func TestAuthorizerDeclinesATransferMethodThatDiffersFromTheLedger(t *testing.T) {
+	h := newHarness(t, true)
+	entry := ledgerEntry()
+	entry.TransferMethod = "rtc"
+	h.record(t, entry)
+	h.api.on("POST", declinePath, ok(`{"id":"`+authorizationID+`","status":"declined"}`))
+
+	h.deliver(t, examplePayload())
+
+	calls := h.api.calls("POST", declinePath)
+	if len(calls) != 1 {
+		t.Fatalf("expected one decline, got %d", len(calls))
+	}
+	if reason, _ := calls[0].body["reason"].(string); calls[0].body["authorization_id"] != authorizationID || !strings.Contains(reason, "transfer_method") {
+		t.Fatalf("unexpected decline %#v", calls[0].body)
+	}
+	if n := len(h.api.calls("POST", authorizePath)); n != 0 {
+		t.Fatalf("expected no authorize, got %d", n)
+	}
+}
+
+// A market with no rail choice sends a null transfer_method, and a 1.x ledger
+// entry has none: the two match, and v2 signs an empty segment.
+func TestAuthorizerMatchesANullTransferMethodToAnEntryWithout(t *testing.T) {
+	h := newHarness(t, true)
+	entry := ledgerEntry()
+	entry.TransferMethod = ""
+	h.record(t, entry)
+	h.api.on("POST", authorizePath, ok(`{"id":"`+draftID+`","status":"processing"}`))
+	payload := examplePayload()
+	paymentOf(payload)["transfer_method"] = nil
+	payload["data"].(map[string]any)["signature_input_v2"] = strings.TrimSuffix(webhookInput, "eft")
+
+	h.deliver(t, payload)
+
+	if n := len(h.api.calls("POST", authorizePath)); n != 1 {
+		t.Fatalf("expected one authorize, got %d", n)
+	}
 }
 
 func TestAuthorizerDeclinesAClientReferenceItNeverIssued(t *testing.T) {

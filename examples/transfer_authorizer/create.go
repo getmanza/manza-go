@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"io"
 
-	manza "github.com/getmanza/manza-go"
+	manza "github.com/getmanza/manza-go/v2"
 )
 
 // Transfer is what cmd/create_transfer asks the API to pay.
@@ -54,7 +54,7 @@ func CreateTransfer(ctx context.Context, creator *manza.Client, ledger *Ledger, 
 	}
 	err = ledger.Record(t.ClientReference, Entry{
 		PaymentID: str(payment["id"]), Amount: str(payment["amount"]), CurrencyCode: str(payment["currency_code"]),
-		AccountID: str(payment["account_id"]), Payee: payee,
+		AccountID: str(payment["account_id"]), Payee: payee, TransferMethod: str(payment["transfer_method"]),
 	})
 	if errors.Is(err, ErrLockNotReleased) {
 		// The entry is written; only the next Record would wait on the lock.

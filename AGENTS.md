@@ -14,13 +14,13 @@ Go SDK for the Manza API. This SDK **replays manza-ruby's cassettes**; it never 
 | Cassette replay (tests) | `httptest.Server` + `gopkg.in/yaml.v3` | `cassette_test.go`. Reads manza-ruby's release tarball from `testdata/cassettes/` (gitignored) |
 | Format | `gofmt` | CI fails on any file `gofmt -l .` prints |
 | Lint / type-check | `go vet ./...` | No golangci-lint, no separate typechecker (the compiler is it) |
-| Package registry | none | The Go module proxy indexes git tags (`proxy.golang.org`, `pkg.go.dev`). Module path is `github.com/getmanza/manza-go` (1.0.0 needs no `/v2` suffix) |
+| Package registry | none | The Go module proxy indexes git tags (`proxy.golang.org`, `pkg.go.dev`). Module path is `github.com/getmanza/manza-go/v2` since 2.0.0 (Go requires the major-version suffix from v2 on; 1.x is `github.com/getmanza/manza-go`) |
 | Release | `bin/release` | manza SDK release kit (byte-identical across SDK repos; repo-specific bits in `scripts/version` + `scripts/release-check`) |
 
 ## Public API surface
 
 ```go
-client, err := manza.New(manza.WithAPIKey("sk_live_...")) // or MANZA_API_KEY
+client, err := manza.New(manza.WithAPIKey("sk_live_...")) // import manza "github.com/getmanza/manza-go/v2"; or MANZA_API_KEY
 
 resp, err := client.Entity.Get(ctx)
 page, err := client.Accounts.List(ctx, manza.AccountListParams{CurrencyCode: "MAD"})
@@ -28,10 +28,10 @@ page, err = client.Customers.List(ctx, manza.CustomerListParams{Query: "Acme"})
 _, err = client.PaymentLinks.Cancel(ctx, id)
 
 // Payments (formerly transfer drafts): create, then answer the authorization webhook
-resp, err = client.Payments.Create(ctx, manza.Attributes{"account_id": accountID, "beneficiary_id": beneficiaryID, "amount": "10.0", "client_reference": "inv-42"})
+resp, err = client.Payments.Create(ctx, manza.Attributes{"account_id": accountID, "beneficiary_id": beneficiaryID, "amount": "10.0", "client_reference": "inv-42", "transfer_method": "standard"})
 event, err := manza.ConstructWebhookEvent(rawBody, r.Header, secret)
 if err != nil { /* *ArgumentError: unverified, answer 401 and stop */ }
-input := manza.SignatureInput(manza.TransferAuthorizationFields{ /* from YOUR own record */ })
+input := manza.SignatureInput(manza.TransferAuthorizationFields{ /* from YOUR own record, TransferMethod included (v2) */ })
 // authorizer: a second client on key B; the creating key gets same_key_forbidden
 _, err = authorizer.Payments.Authorize(ctx, paymentID, authorizationID, manza.Sign(secret, input))
 _, err = authorizer.Payments.Decline(ctx, paymentID, authorizationID, "wrong amount")
@@ -54,8 +54,8 @@ if errors.As(err, &apiErr) && apiErr.Kind == manza.KindConflict {
 - Services on `Client`: `Accounts`, `Beneficiaries`, `CheckoutSessions`, `Customers`, `Entity`, `Invoices`, `PayeeTrustRequests`, `PaymentLinks`, `Payments`, `TransferAuthorizer`, `WebhookEndpoints`. `TransferDrafts` is the deprecated alias of `Payments` for all of 1.x (same `*PaymentsService`; `TransferDraftsService` is a type alias).
 - `manza.Page` (`page.go`): cursor-based, hard cap `MaxPerPage` = 100; `Next(ctx)` returns nil on the last page.
 - `*manza.Response` carries `Body` (snake_case `map[string]any`, as-is) and `Raw`. `Response.Decode` maps it onto the typed models in `types.go` (additive; `Body` is unchanged).
-- Errors: a single `*Error` with a `Kind` (`KindAuthentication`, `KindForbidden`, `KindNotFound`, `KindValidation` for 400 and 422, `KindConflict` for 409 with `PaymentID`, `KindRateLimit`, `KindServer`, `KindAPI`), plus `*ConfigurationError`, `*ConnectionError` and `*ArgumentError` (a value the SDK refuses to send, no HTTP made, e.g. a blank signature). Never match status codes.
-- Signer (`transfer_authorization.go`): `SignatureInput`, `Sign`, `PayeeFor`.
+- Errors: a single `*Error` with a `Kind` (`KindAuthentication`, `KindForbidden`, `KindNotFound`, `KindValidation` for 400 and any other 422, `KindPlanLimitReached` for a 422 of type `plan_limit_reached` with `LimitKind`, `LimitCurrent`, `LimitMax` (since 2.0), `KindConflict` for 409 with `PaymentID`, `KindRateLimit`, `KindServer`, `KindAPI`), plus `*ConfigurationError`, `*ConnectionError` and `*ArgumentError` (a value the SDK refuses to send, no HTTP made, e.g. a blank signature). Never match status codes.
+- Signer (`transfer_authorization.go`): `SignatureInput` (v2 only since 2.0: `transfer_method` is the last segment), `Sign`, `PayeeFor`.
 - Webhook verifier (`webhook.go`): `VerifyWebhook`, `ConstructWebhookEvent`, `SignWebhook` and the `WebhookOption`s. Failures are `*ArgumentError` with manza-ruby's exact messages.
 - `examples/transfer_authorizer/` is its **own Go module** (`replace` onto `../..`) so it stays out of the published module zip; root `./...` does not reach it, so CI and `scripts/release-check` run its `go vet` and `go test` separately. It uses the standard library only.
 - Snake-case wire format: bodies are returned as-is. **No auto-camelCasing.**
@@ -73,7 +73,7 @@ if errors.As(err, &apiErr) && apiErr.Kind == manza.KindConflict {
 - **`gofmt -l .`, `go vet ./...` and `go test ./...` before every commit.** CI runs the same (`scripts/release-check` too).
 - **Cassette contract.**
   - Cassettes come from the manza-ruby release pinned in `scripts/fetch-cassettes.sh` (`PINNED_TAG`, `cassettes-vX.Y.Z.tar.gz`), not the newest one, into `testdata/cassettes/`. Request-body literals recorded in the cassettes (`[zazu-ruby-fixture] create spec - do not approve`, `Manza Fixture Beneficiary spec`, `Created by zazu-ruby fixture spec`, `zazu-fixture-success`) stay verbatim in `resources_test.go`: the body match is semantic, so renaming them breaks replay. They are recorded against `https://ma.manza.dev`; the harness fails any cassette whose URI is on another host (`replayHost`).
-  - Load **one cassette per test** where two share method + URI: `payments/authorize` vs `authorize_same_key`, and `create` vs `create_duplicate`. The server serves the first matching interaction.
+  - Load **one cassette per test** where two share method + URI: `payments/authorize` vs `authorize_same_key`, `payments/create` vs `create_duplicate` vs `create_invalid_transfer_method`, and `invoices/create` vs `create_without_account` vs `create_invalid_generate_payment_link`. The server serves the first matching interaction.
   - The four `payments/authorize*` cassettes match method + path + query + the JSON body minus `signature` (the recorded value is a scrubbed HMAC replay cannot reproduce).
   - Every other cassette matches method + path + query + **semantic JSON body** (`jsonEqual`: parsed and compared, not byte-for-byte, because Go sorts map keys). Bodies built from structs keep the recorded key order.
   - Cassette responses carry no `Content-Length`; `net/http` computes it. Don't add it.
@@ -82,9 +82,9 @@ if errors.As(err, &apiErr) && apiErr.Kind == manza.KindConflict {
 - **Errors and types.** Return errors, never discard one with `_ =`; fix the producer instead of hiding a wrong shape behind a `.(string)` assertion. A public API break is made only on purpose, named in the changelog and released as a major version.
 - **Hosts.** Default `https://ma.manza.finance`, South Africa `https://za.manza.finance`, staging and cassettes `https://ma.manza.dev`. Env vars are `MANZA_API_KEY`, `MANZA_BASE_URL` and `MANZA_API_VERSION` (`env.go`). The legacy `ZAZU_*` names are read as a fallback with a one-time stderr deprecation warning per variable, for all of 1.x; there is no timeout env var in this SDK. The request header is `Manza-Version`, the User-Agent `manza-go/<Version>`.
 - **Error model is shared across the SDK family.** Adding an error class or `Kind` means coordinating manza-ruby and manza-ts at minimum. `KindConflict` represents 409 responses. `Kind` string values are part of the contract.
-- **Signer.** `SignatureInput` and `Sign` must keep reproducing the two fixed vectors in `transfer_authorization_test.go`, the same vectors as manza-ruby's `spec/manza/transfer_authorization_spec.rb`. Never sign the server's `signature_input` blindly: build it from your own record of the transfer, and pass `amount` verbatim (`"2500.0"`).
+- **Signer.** `SignatureInput` and `Sign` must keep reproducing the three fixed v2 vectors in `transfer_authorization_test.go`, the same vectors as manza-ruby's `spec/manza/transfer_authorization_spec.rb`. Never sign the server's `signature_input_v2` blindly: build it from your own record of the transfer, and pass `amount` verbatim (`"2500.0"`).
 - **Release.** `bin/release` is byte-identical across the SDK repos and is never edited in place. A tag whose version differs from `Version` in `client.go` fails `release.yml`'s tag == `Version` gate, so a new version always goes through `bin/release` (it updates `Version` via `scripts/version`). Repo-specific logic lives in `scripts/version` (the `Version` constant in `client.go`) and `scripts/release-check`. `release.yml` gates on tag == `Version`. There is no registry token or trusted-publishing environment: a Go module's version is its git tag and the proxy indexes it. If a registry is ever added, its trusted-publisher binding must name `getmanza/manza-go`.
-- **The repo lives at `getmanza/manza-go`** (renamed from `zazu-go`). Remotes and URLs must say `getmanza`; the module path is `github.com/getmanza/manza-go`.
+- **The repo lives at `getmanza/manza-go`** (renamed from `zazu-go`). Remotes and URLs must say `getmanza`; the module path is `github.com/getmanza/manza-go/v2`.
 - **Never escape backticks in PR bodies.** With `<<'EOF'` (single-quoted heredoc) the shell passes everything through verbatim. Typing `` \` `` produces literal `` \` `` in the rendered PR. See "PR descriptions" below.
 
 ## PR descriptions
@@ -160,7 +160,7 @@ The exact steps from `.github/workflows/ci.yml`:
 
 ```bash
 # One-time setup (Go 1.24+), and again when manza-ruby ships a new release
-scripts/fetch-cassettes.sh            # pinned manza-ruby tarball (v1.3.0) -> testdata/cassettes/
+scripts/fetch-cassettes.sh            # pinned manza-ruby tarball (v2.0.0) -> testdata/cassettes/
 scripts/fetch-cassettes.sh v0.3.0     # or a specific tag
 
 # Daily loop
@@ -213,6 +213,6 @@ If the contract breaks (new request shape, new error kind), it is a coordinated 
 ## Repository links
 
 - This repo: https://github.com/getmanza/manza-go
-- Go package docs (module proxy, no registry): https://pkg.go.dev/github.com/getmanza/manza-go
+- Go package docs (module proxy, no registry): https://pkg.go.dev/github.com/getmanza/manza-go/v2
 - Reference implementation: https://github.com/getmanza/manza-ruby
 - TypeScript SDK: https://github.com/getmanza/manza-ts

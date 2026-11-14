@@ -9,10 +9,12 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 
-	manza "github.com/getmanza/manza-go"
+	manza "github.com/getmanza/manza-go/v2"
 )
 
 func replayClient(t *testing.T, server *httptest.Server) *manza.Client {
@@ -103,6 +105,135 @@ func TestInvoices(t *testing.T) {
 	invoiceID := fixtureID(t, "MANZA_FIXTURE_INVOICE_ID")
 	if _, err := client.Invoices.Get(ctx, invoiceID); err != nil {
 		t.Fatalf("invoices get: %v", err)
+	}
+}
+
+// invoiceItems is the line item every recorded invoice create sends.
+func invoiceItems() []map[string]any {
+	return []map[string]any{{"description": "SDK fixture line", "quantity": 1, "unit_price": "100.00"}}
+}
+
+// Fixed dates keep the recorded body stable (the API refuses an issue date in
+// a month before the entity's newest invoice number).
+func TestInvoicesCreate(t *testing.T) {
+	server := startReplayServer(t, "invoices/create")
+	client := replayClient(t, server)
+
+	resp, err := client.Invoices.Create(context.Background(), manza.Attributes{
+		"customer_id":           fixtureID(t, "MANZA_FIXTURE_CUSTOMER_ID"),
+		"account_id":            fixtureID(t, "MANZA_FIXTURE_ACCOUNT_ID"),
+		"currency_code":         "MAD",
+		"issue_date":            "2026-11-14",
+		"due_date":              "2026-12-14",
+		"generate_payment_link": true,
+		"items":                 invoiceItems(),
+	})
+	if err != nil {
+		t.Fatalf("invoices create: %v", err)
+	}
+	if resp.Status != 201 {
+		t.Fatalf("expected 201, got %d", resp.Status)
+	}
+	var invoice manza.Invoice
+	if err := resp.Decode(&invoice); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !invoice.GeneratePaymentLink {
+		t.Fatal("expected generate_payment_link true")
+	}
+	if invoice.Account == nil || invoice.Account.ID != fixtureID(t, "MANZA_FIXTURE_ACCOUNT_ID") {
+		t.Fatalf("expected the embedded fixture account, got %#v", invoice.Account)
+	}
+}
+
+// An invoice is paid into one of the entity's accounts: a create without one
+// is refused as not approvable (state_error, no param). An account_id that is
+// not the entity's is refused with param account_id.
+func TestInvoicesCreateWithoutAccount(t *testing.T) {
+	server := startReplayServer(t, "invoices/create_without_account")
+	client := replayClient(t, server)
+
+	_, err := client.Invoices.Create(context.Background(), manza.Attributes{
+		"customer_id":   fixtureID(t, "MANZA_FIXTURE_CUSTOMER_ID"),
+		"currency_code": "MAD",
+		"issue_date":    "2026-05-03",
+		"due_date":      "2026-06-03",
+		"items":         invoiceItems(),
+	})
+	var apiErr *manza.Error
+	if !errors.As(err, &apiErr) {
+		t.Fatalf("expected *manza.Error, got %T (%v)", err, err)
+	}
+	if apiErr.Kind != manza.KindValidation || apiErr.Status != 422 || apiErr.Type != "state_error" {
+		t.Fatalf("expected validation/422/state_error, got %s/%d/%s", apiErr.Kind, apiErr.Status, apiErr.Type)
+	}
+	// The account refusal, not a date one (also state_error).
+	if apiErr.Param != "" {
+		t.Fatalf("expected no param, got %q", apiErr.Param)
+	}
+	if !regexp.MustCompile(`(?i)compte bancaire|bank account`).MatchString(apiErr.Message) {
+		t.Fatalf("expected the bank account refusal, got %q", apiErr.Message)
+	}
+}
+
+// Only a boolean (or "true"/"false"/"1"/"0") is taken: any other text is
+// refused before anything is created.
+func TestInvoicesCreateInvalidGeneratePaymentLink(t *testing.T) {
+	server := startReplayServer(t, "invoices/create_invalid_generate_payment_link")
+	client := replayClient(t, server)
+
+	_, err := client.Invoices.Create(context.Background(), manza.Attributes{
+		"customer_id":           fixtureID(t, "MANZA_FIXTURE_CUSTOMER_ID"),
+		"account_id":            fixtureID(t, "MANZA_FIXTURE_ACCOUNT_ID"),
+		"currency_code":         "MAD",
+		"issue_date":            "2026-05-03",
+		"due_date":              "2026-06-03",
+		"generate_payment_link": "yes please",
+		"items":                 invoiceItems(),
+	})
+	var apiErr *manza.Error
+	if !errors.As(err, &apiErr) {
+		t.Fatalf("expected *manza.Error, got %T (%v)", err, err)
+	}
+	if apiErr.Kind != manza.KindValidation || apiErr.Status != 400 {
+		t.Fatalf("expected validation/400, got %s/%d", apiErr.Kind, apiErr.Status)
+	}
+	if !strings.Contains(apiErr.Message, "generate_payment_link") {
+		t.Fatalf("expected the message to name generate_payment_link, got %q", apiErr.Message)
+	}
+}
+
+func TestInvoicesUpdate(t *testing.T) {
+	server := startReplayServer(t, "invoices/update")
+	client := replayClient(t, server)
+
+	resp, err := client.Invoices.Update(context.Background(), fixtureID(t, "MANZA_FIXTURE_INVOICE_ID"), manza.Attributes{
+		"account_id":            fixtureID(t, "MANZA_FIXTURE_ACCOUNT_ID"),
+		"notes":                 "updated by SDK fixture spec",
+		"generate_payment_link": true,
+	})
+	if err != nil {
+		t.Fatalf("invoices update: %v", err)
+	}
+	if resp.Status != 200 {
+		t.Fatalf("expected 200, got %d", resp.Status)
+	}
+	var invoice manza.Invoice
+	if err := resp.Decode(&invoice); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !invoice.GeneratePaymentLink {
+		t.Fatal("expected generate_payment_link true")
+	}
+	if invoice.Account == nil || invoice.Account.ID != fixtureID(t, "MANZA_FIXTURE_ACCOUNT_ID") {
+		t.Fatalf("expected the embedded fixture account, got %#v", invoice.Account)
+	}
+}
+
+// generate_payment_link on Create or Update replaced CreatePaymentLink.
+func TestInvoicesHasNoCreatePaymentLink(t *testing.T) {
+	if _, ok := reflect.TypeOf(&manza.InvoicesService{}).MethodByName("CreatePaymentLink"); ok {
+		t.Fatal("expected InvoicesService to have no CreatePaymentLink")
 	}
 }
 
@@ -208,6 +339,7 @@ func TestPaymentsCreate(t *testing.T) {
 		"payment_reference": "SDK fixture",
 		"internal_notes":    "[zazu-ruby-fixture] create spec - do not approve",
 		"client_reference":  fixtureID(t, "MANZA_FIXTURE_CLIENT_REFERENCE"),
+		"transfer_method":   "standard",
 	})
 	if err != nil {
 		t.Fatalf("payments create: %v", err)
@@ -227,6 +359,34 @@ func TestPaymentsCreate(t *testing.T) {
 	}
 	if resp.Body["transfer"] != nil {
 		t.Fatalf("expected nil transfer before approval, got %#v", resp.Body["transfer"])
+	}
+	var payment manza.TransferDraft
+	if err := resp.Decode(&payment); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if payment.TransferMethod == nil || *payment.TransferMethod != manza.TransferMethodStandard {
+		t.Fatalf("expected transfer_method standard, got %v", payment.TransferMethod)
+	}
+}
+
+// A rail the market does not offer is refused on transfer_method, and nothing
+// is created.
+func TestPaymentsCreateInvalidTransferMethod(t *testing.T) {
+	server := startReplayServer(t, "payments/create_invalid_transfer_method")
+	client := replayClient(t, server)
+
+	_, err := client.Payments.Create(context.Background(), manza.Attributes{
+		"account_id":      fixtureID(t, "MANZA_FIXTURE_ACCOUNT_ID"),
+		"beneficiary_id":  fixtureID(t, "MANZA_FIXTURE_BENEFICIARY_ID"),
+		"amount":          "10.00",
+		"transfer_method": "carrier_pigeon",
+	})
+	var apiErr *manza.Error
+	if !errors.As(err, &apiErr) {
+		t.Fatalf("expected *manza.Error, got %T (%v)", err, err)
+	}
+	if apiErr.Kind != manza.KindValidation || apiErr.Status != 422 || apiErr.Param != "transfer_method" {
+		t.Fatalf("expected validation/422 on transfer_method, got %s/%d on %q", apiErr.Kind, apiErr.Status, apiErr.Param)
 	}
 }
 
@@ -337,6 +497,7 @@ func TestPaymentsAuthorize(t *testing.T) {
 		AccountID:       fixtureID(t, "MANZA_FIXTURE_ACCOUNT_ID"),
 		Payee:           payee,
 		ClientReference: fixtureID(t, "MANZA_FIXTURE_AUTHORIZABLE_CLIENT_REFERENCE"),
+		TransferMethod:  manza.TransferMethodStandard,
 	})
 
 	resp, err := client.Payments.Authorize(context.Background(), draftID,
@@ -405,6 +566,7 @@ func TestPaymentsAuthorizeNewPayee(t *testing.T) {
 		AccountID:       fixtureID(t, "MANZA_FIXTURE_ACCOUNT_ID"),
 		Payee:           payee,
 		ClientReference: fixtureID(t, "MANZA_FIXTURE_NEW_PAYEE_CLIENT_REFERENCE"),
+		TransferMethod:  manza.TransferMethodStandard,
 	})
 
 	resp, err := client.Payments.Authorize(context.Background(), draftID,
@@ -688,6 +850,10 @@ func TestTransferAuthorizerGet(t *testing.T) {
 	if authorizer.PerTransferLimit == "" || authorizer.DailyLimit == "" || authorizer.DailyAuthorizedTotal == "" ||
 		authorizer.SecretExpiresAt == "" || authorizer.WebhookEndpointID == "" || authorizer.EnrolledAt == "" {
 		t.Fatalf("expected every field set, got %#v", authorizer)
+	}
+	// "Approve transfers to new payees" is on for the fixture entity (setup step 6).
+	if !authorizer.TrustNewPayees || authorizer.NewPayeeLimit == nil || *authorizer.NewPayeeLimit == "" {
+		t.Fatalf("expected trust_new_payees with a new_payee_limit, got %#v", authorizer)
 	}
 }
 

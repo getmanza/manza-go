@@ -175,7 +175,8 @@ type InvoiceListParams struct {
 	CustomerID string
 }
 
-// List calls GET /api/invoices.
+// List calls GET /api/invoices. Status: draft, pending_approval, declined,
+// approved, sent, paid, overdue or cancelled.
 func (s *InvoicesService) List(ctx context.Context, params InvoiceListParams) (*Page, error) {
 	base := url.Values{}
 	setIfPresent(base, "status", params.Status)
@@ -189,11 +190,31 @@ func (s *InvoicesService) Get(ctx context.Context, id string) (*Response, error)
 }
 
 // Create calls POST /api/invoices.
+//
+// Required: customer_id, account_id (the entity's account the invoice is paid
+// into, from AccountsService.List; without one the API answers a validation
+// *Error of type `state_error`, and an account that is not the entity's one
+// with Param "account_id"), issue_date, due_date and items. Optional:
+// currency_code, reference, notes, payment_terms, send_to_email, discounts,
+// delivery_date (Morocco only) and generate_payment_link.
+//
+// `generate_payment_link: true` asks for a card payment link, made from the
+// invoice's account when the invoice is approved; it needs the
+// `payment_links:write` scope and is taken only while payment links are
+// enabled for the entity. A boolean, nil (no link) or the strings "true",
+// "false", "1" and "0" are taken; any other value is a 400 validation *Error
+// and nothing is created. It replaces the removed CreatePaymentLink.
+//
+// The response carries generate_payment_link, the embedded account (see
+// Invoice and InvoiceAccount) and payment_link once one exists. A plan that
+// caps invoices returns a KindPlanLimitReached *Error.
 func (s *InvoicesService) Create(ctx context.Context, attributes Attributes) (*Response, error) {
 	return s.client.post(ctx, "api/invoices", attributes)
 }
 
-// Update calls PATCH /api/invoices/:id.
+// Update calls PATCH /api/invoices/:id. Takes the Create fields, account_id
+// and generate_payment_link included (the same scope and entity rule apply),
+// on an invoice that is still editable.
 func (s *InvoicesService) Update(ctx context.Context, id string, attributes Attributes) (*Response, error) {
 	return s.client.patch(ctx, encodePath("api/invoices", id), attributes)
 }
@@ -218,14 +239,11 @@ func (s *InvoicesService) CreditNote(ctx context.Context, id string) (*Response,
 	return s.client.post(ctx, encodePath("api/invoices", id, "credit_note"), nil)
 }
 
-// Delete calls DELETE /api/invoices/:id.
+// Delete calls DELETE /api/invoices/:id. Only a draft, pending_approval or
+// declined invoice that has no number yet; any other is a validation *Error
+// of type `state_error`.
 func (s *InvoicesService) Delete(ctx context.Context, id string) (*Response, error) {
 	return s.client.delete(ctx, encodePath("api/invoices", id))
-}
-
-// CreatePaymentLink calls POST /api/invoices/:invoice_id/payment_link.
-func (s *InvoicesService) CreatePaymentLink(ctx context.Context, invoiceID, accountID string) (*Response, error) {
-	return s.client.post(ctx, encodePath("api/invoices", invoiceID, "payment_link"), Attributes{"account_id": accountID})
 }
 
 // PaymentLinksService — standalone payment links (not attached to an invoice).
@@ -300,8 +318,10 @@ type payeeTrustRequestBody struct {
 // `refused` (it did not qualify: `untrusted_payee`, `unrestricted_api_key`,
 // `over_new_payee_limit`, `over_transfer_limit`, `over_daily_limit`,
 // `currency_mismatch`, `suspended` or `secret_expired`), or `expired` /
-// `superseded` / `failed` (a challenge closed without an authorize:
-// `expired`, `stale` or `signature_failed`). It is null when no authorizer
+// `superseded` / `failed` (a challenge closed without executing the transfer:
+// `expired`, `stale`, `signature_failed`, or `rail_limit_exceeded` with status
+// `superseded`: the challenge was authorized, but the transfer was over its
+// rail's limit when it executed, so nothing moved). It is null when no authorizer
 // was enrolled.
 type PaymentsService struct{ client *Client }
 
@@ -317,7 +337,15 @@ type TransferDraftsService = PaymentsService
 // Optional: external_account_id, currency_code, payment_reference,
 // internal_notes, client_reference (unique per entity, at most 128
 // characters; a duplicate returns a conflict *Error whose PaymentID names
-// the existing payment).
+// the existing payment), transfer_method (the rail: TransferMethodEFT or
+// TransferMethodRTC in South Africa, TransferMethodStandard or
+// TransferMethodInstant in Morocco; one the market does not offer is a
+// validation *Error with Param "transfer_method", and nothing is created).
+//
+// The response's transfer_method is the rail sent, or the provider's default
+// when left out; null where the market offers no choice. The
+// machine-authorization signature signs it
+// (TransferAuthorizationFields.TransferMethod).
 func (s *PaymentsService) Create(ctx context.Context, attributes Attributes) (*Response, error) {
 	return s.client.post(ctx, "api/payments", attributes)
 }
@@ -336,13 +364,18 @@ type authorizeBody struct {
 //
 // Executes the payment. authorizationID comes from the
 // `payment.authorization_requested` webhook; build signature with
-// SignatureInput and Sign. Requires the `transfers:authorize` scope on a key
+// SignatureInput and Sign (the v2 input, which the API verifies unless the
+// client is pinned to `Manza-Version: 2026-03-27`). Requires the `transfers:authorize` scope on a key
 // other than the payment's creator (otherwise a forbidden *Error of type
 // `same_key_forbidden`), bound to an IP allowlist (otherwise forbidden
 // `unrestricted_api_key`). A conflict *Error of type `authorization_busy`
 // means a bank-detail edit, trust or trust revocation on the payee was in
 // flight: retry. A blank signature is refused locally with *ArgumentError:
-// the API counts it as a failed attempt, and five fail the challenge.
+// the API counts it as a failed attempt, and five fail the challenge. A valid
+// signature on a transfer over its rail's limit is a 422 validation *Error
+// (`state_error`): nothing moved, the authorization is `superseded` with
+// refusal_reason `rail_limit_exceeded`, and the payment went to your
+// approvers.
 func (s *PaymentsService) Authorize(ctx context.Context, id, authorizationID, signature string) (*Response, error) {
 	if strings.TrimSpace(signature) == "" {
 		return nil, &ArgumentError{Message: "signature cannot be blank"}
@@ -378,10 +411,11 @@ type TransferAuthorizerService struct{ client *Client }
 // Returns status (active / suspended), suspension_reason (member,
 // signature_failures, secret_expired, endpoint_disabled; null when active),
 // currency_code, per_transfer_limit, daily_limit, daily_authorized_total
-// (the last 24 hours), secret_expires_at, webhook_endpoint_id and
-// enrolled_at; decode it onto TransferAuthorizer. It does not show whether
-// new payees are approved. A not-found *Error means no authorizer is
-// enrolled.
+// (the last 24 hours), secret_expires_at, webhook_endpoint_id, enrolled_at,
+// trust_new_payees (whether "Approve transfers to new payees" is on) and
+// new_payee_limit (the ceiling for a transfer to a new payee, a decimal
+// string; null while trust_new_payees is off); decode it onto
+// TransferAuthorizer. A not-found *Error means no authorizer is enrolled.
 func (s *TransferAuthorizerService) Get(ctx context.Context) (*Response, error) {
 	return s.client.get(ctx, "api/transfer_authorizer", nil)
 }

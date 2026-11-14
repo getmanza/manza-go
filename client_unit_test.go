@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	manza "github.com/getmanza/manza-go"
+	manza "github.com/getmanza/manza-go/v2"
 )
 
 func TestNewRequiresAPIKey(t *testing.T) {

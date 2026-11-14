@@ -7,17 +7,22 @@ import (
 )
 
 // Error kinds, mirroring the shared Manza SDK error hierarchy. Together with
-// ConfigurationError, ConnectionError and ArgumentError they make up the ten
-// classes every SDK exposes.
+// ConfigurationError, ConnectionError and ArgumentError they make up the
+// eleven classes every SDK exposes.
 const (
 	KindAuthentication = "authentication" // 401
 	KindForbidden      = "forbidden"      // 403
 	KindNotFound       = "not_found"      // 404
 	KindValidation     = "validation"     // 400, 422
-	KindConflict       = "conflict"       // 409
-	KindRateLimit      = "rate_limit"     // 429
-	KindServer         = "server"         // 5xx
-	KindAPI            = "api"            // any other non-2xx
+	// KindPlanLimitReached is a 422 whose type is plan_limit_reached: the
+	// entity's plan caps this kind of record and the cap is reached (the
+	// other SDKs' PlanLimitReachedError, a validation subclass). Retrying
+	// does not help until the plan changes or the period rolls over.
+	KindPlanLimitReached = "plan_limit_reached" // 422
+	KindConflict         = "conflict"           // 409
+	KindRateLimit        = "rate_limit"         // 429
+	KindServer           = "server"             // 5xx
+	KindAPI              = "api"                // any other non-2xx
 )
 
 // Error is the API error envelope, mirroring the other Manza SDKs' hierarchy:
@@ -33,7 +38,13 @@ type Error struct {
 	PaymentID  string // only set for conflict: the draft already holding a duplicate client_reference
 	RequestID  string
 	RetryAfter int // seconds; only set for rate_limit
-	Body       map[string]any
+	// LimitKind names what the plan caps (e.g. "invoices"), LimitCurrent the
+	// count the entity holds and LimitMax the cap. Only set for
+	// plan_limit_reached.
+	LimitKind    string
+	LimitCurrent int
+	LimitMax     int
+	Body         map[string]any
 }
 
 func (e *Error) Error() string {
@@ -74,9 +85,17 @@ func newError(status int, header http.Header, body map[string]any) *Error {
 		if status == 409 {
 			e.PaymentID, _ = payload["payment_id"].(string)
 		}
+		if status == 422 && e.Type == "plan_limit_reached" {
+			e.Kind = KindPlanLimitReached
+			e.LimitKind, _ = payload["kind"].(string)
+			e.LimitCurrent = intOf(payload["current"])
+			e.LimitMax = intOf(payload["max"])
+		}
 	}
 
 	switch {
+	case e.Kind != "":
+		// set from the body above
 	case status == 401:
 		e.Kind = KindAuthentication
 	case status == 403:
@@ -102,4 +121,10 @@ func newError(status int, header http.Header, body map[string]any) *Error {
 		e.Message = http.StatusText(status)
 	}
 	return e
+}
+
+// intOf reads a JSON number, which encoding/json decodes as float64.
+func intOf(v any) int {
+	f, _ := v.(float64)
+	return int(f)
 }

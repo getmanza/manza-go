@@ -305,7 +305,7 @@ func (p *Preflight) payeeTrusted(ctx context.Context) {
 	}
 	p.warn(fmt.Sprintf("payee %s is not trusted yet", str(account["id"])),
 		"it qualifies only with \"Approve transfers to new payees\" on in Settings → Developer → Transfer approval "+
-			"(not visible through the API), key A bound to an IP allowlist, and the amount within the limit per "+
+			"(`trust_new_payees` on TransferAuthorizer.Get), key A bound to an IP allowlist, and the amount within the limit per "+
 			"transfer to a new payee, and only if its bank details were never trusted (revoked or edited "+
 			"details always go to your approvers); otherwise have an approver trust it")
 }

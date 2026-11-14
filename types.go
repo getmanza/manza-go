@@ -15,10 +15,21 @@ const (
 	BeneficiaryTypeBusiness   = "business"
 )
 
+// TransferMethod values: the rail a payment is sent on. South Africa offers
+// eft and rtc, Morocco standard and instant.
+const (
+	TransferMethodEFT      = "eft"
+	TransferMethodRTC      = "rtc"
+	TransferMethodStandard = "standard"
+	TransferMethodInstant  = "instant"
+)
+
 // Authorization is a machine-authorization challenge on a payment, and the
 // response of PaymentsService.Decline. RefusalReason is set when Status is
 // refused, expired, superseded or failed: the payment went to the in-app
-// approvers (see PaymentsService).
+// approvers (see PaymentsService). `rail_limit_exceeded` (status superseded)
+// means the challenge was authorized but the transfer was over its rail's
+// limit when it executed, so nothing moved.
 type Authorization struct {
 	ID            string  `json:"id"`
 	Status        string  `json:"status"` // pending, authorized, declined, refused, expired, superseded, failed
@@ -37,11 +48,15 @@ type TransferRef struct {
 // TransferDraft is an API-initiated transfer (a payment): the response of
 // PaymentsService.Create, Get and Authorize.
 type TransferDraft struct {
-	ID                   string         `json:"id"`
-	Status               string         `json:"status"`
-	CurrencyCode         string         `json:"currency_code"`
-	PaymentReference     *string        `json:"payment_reference"`
-	ClientReference      *string        `json:"client_reference"`
+	ID               string  `json:"id"`
+	Status           string  `json:"status"`
+	CurrencyCode     string  `json:"currency_code"`
+	PaymentReference *string `json:"payment_reference"`
+	ClientReference  *string `json:"client_reference"`
+	// TransferMethod is the rail sent, or the provider's default when the
+	// create left it out; nil where the market offers no choice. The v2
+	// signature signs it (TransferAuthorizationFields.TransferMethod).
+	TransferMethod       *string        `json:"transfer_method"`
 	AccountID            string         `json:"account_id"`
 	BeneficiaryID        *string        `json:"beneficiary_id"`
 	ExternalAccountID    *string        `json:"external_account_id"`
@@ -89,6 +104,11 @@ type TransferAuthorizer struct {
 	SecretExpiresAt      string  `json:"secret_expires_at"`
 	WebhookEndpointID    string  `json:"webhook_endpoint_id"`
 	EnrolledAt           string  `json:"enrolled_at"`
+	// TrustNewPayees is whether "Approve transfers to new payees" is on.
+	TrustNewPayees bool `json:"trust_new_payees"`
+	// NewPayeeLimit is the ceiling for a transfer to a new payee, a decimal
+	// string; nil while TrustNewPayees is off.
+	NewPayeeLimit *string `json:"new_payee_limit"`
 }
 
 // PayeeTrustRequest is a request to trust payees for machine-authorized
@@ -174,10 +194,25 @@ type Customer struct {
 type Invoice struct {
 	ID           string  `json:"id"`
 	Number       string  `json:"number"`
-	Status       string  `json:"status"`
+	Status       string  `json:"status"` // draft, pending_approval, declined, approved, sent, paid, overdue, cancelled
 	CurrencyCode string  `json:"currency_code"`
 	IssueDate    string  `json:"issue_date"`
 	DueDate      string  `json:"due_date"`
 	DeliveryDate *string `json:"delivery_date,omitempty"`
 	Total        string  `json:"total"`
+	// GeneratePaymentLink asks for a card payment link, made from Account
+	// when the invoice is approved.
+	GeneratePaymentLink bool `json:"generate_payment_link"`
+	// Account is the entity's account the invoice is paid into.
+	Account *InvoiceAccount `json:"account"`
+}
+
+// InvoiceAccount is the account embedded in an Invoice. RIB is set in
+// Morocco, AccountNumber in South Africa.
+type InvoiceAccount struct {
+	ID            string  `json:"id"`
+	Name          string  `json:"name"`
+	CurrencyCode  string  `json:"currency_code"`
+	RIB           *string `json:"rib,omitempty"`
+	AccountNumber *string `json:"account_number,omitempty"`
 }

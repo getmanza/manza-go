@@ -9,6 +9,8 @@ Two processes and a shared ledger, matching the two-key model of [transfer autho
 | `cmd/preflight` (`preflight.go`) | Checks every setup step the API can show and prints the fix for each that fails; key B's IP allowlist you check by hand | A and B |
 | `ledger.go` | Your own record of what you created, keyed by `client_reference`. Swap it for your database | — |
 
+Since manza-go 2.0 every ledger entry records the payment's `transfer_method`, which the v2 signature signs. An entry written by the 1.x example has none, which reads as empty: it still matches a payment whose `transfer_method` is null (a market with no rail choice), but the authorizer declines a payment that carries one as a mismatch. Let open challenges finish (or expire) before upgrading, or add `"transfer_method"` from `Payments.Get` to those entries.
+
 It is its own Go module (`go.mod` here, with a `replace` onto this checkout of the SDK), so it is not part of the published `github.com/getmanza/manza-go` module. It uses the standard library only.
 
 ## Setup
@@ -37,7 +39,7 @@ Every command reads `.env` (and the authorizer and creator share `ledger.json`) 
 | Signing secret | `MANZA_AUTHORIZER_SECRET` is empty |
 | Webhook endpoint | the enrolled endpoint (`webhook_endpoint_id`) is not active. On `ngrok-free.app` or `trycloudflare.com` it warns: that URL changes when the tunnel restarts |
 | Amount | over the limit per transfer, or over what is left of the limit per 24 hours (`daily_limit` − `daily_authorized_total`) |
-| Payee | the beneficiary has no default bank account. When that account is not `trusted` it warns: the transfer qualifies only with *Approve transfers to new payees* on (not visible through the API), key A bound to an IP allowlist and the amount within the limit per transfer to a new payee, and only for bank details never trusted: revoked or edited details always go to your approvers |
+| Payee | the beneficiary has no default bank account. When that account is not `trusted` it warns: the transfer qualifies only with *Approve transfers to new payees* on (`trust_new_payees` on `TransferAuthorizer.Get`), key A bound to an IP allowlist and the amount within the limit per transfer to a new payee, and only for bank details never trusted: revoked or edited details always go to your approvers |
 
 ## Run
 
@@ -75,9 +77,9 @@ The authorizer (`cmd/authorizer`):
 | `received payment.authorization_requested (…), signature verified` | The delivery's `X-Manza-Signature` matches and its timestamp is fresh |
 | `rejected a delivery: …` | Bad signature, stale timestamp, missing header, or a body that is not a JSON object: answered 401 (a body over 1 MiB: 413) |
 | `ignoring …` | Any other event: answered 200, nothing done |
-| `ledger match for …` | The payment's id, amount, currency, account and payee match `ledger.json` |
+| `ledger match for …` | The payment's id, amount, currency, account, payee and `transfer_method` match `ledger.json` |
 | `new payee ext:…, will be trusted on authorize` | The webhook's `payment.payee_trusted` is `false`: *Approve transfers to new payees* is on and these bank details were never trusted. The authorize trusts them |
-| `signature input differs from the webhook's: …` | The input built from the ledger is not the webhook's `signature_input`, so a signature would fail and count toward suspension. The challenge is left unanswered and goes to your approvers when it expires; compare the two strings |
+| `signature input differs from the webhook's: …` | The input built from the ledger is not the webhook's `signature_input_v2`, so a signature would fail and count toward suspension. The challenge is left unanswered and goes to your approvers when it expires; compare the two strings |
 | `… retrying in Ns` | The API timed out, answered 5xx, rate-limited, or answered 409 `authorization_busy` (the payee's bank details were being edited, trusted or revoked). Authorize and decline replay idempotently; after three attempts the `API error` line follows (or `could not answer the challenge: …connection error…` when the API never answered) and the challenge goes to your approvers when it expires |
 | `signed the challenge for payment …` | HMAC-SHA256 of the ledger's signature input under the signing secret |
 | `authorized payment … (status "processing")` | Accepted: execution has started. Poll `Payments.Get` (processing → completed / failed) or subscribe to the `transfer.executed` webhook for the outcome |

@@ -50,6 +50,58 @@ func TestErrorKindByStatus(t *testing.T) {
 	}
 }
 
+func errorFrom(t *testing.T, status int, body string) *manza.Error {
+	t.Helper()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(status)
+		_, _ = w.Write([]byte(body))
+	}))
+	t.Cleanup(server.Close)
+
+	_, err := replayClient(t, server).Entity.Get(context.Background())
+	var apiErr *manza.Error
+	if !errors.As(err, &apiErr) {
+		t.Fatalf("expected *manza.Error, got %T (%v)", err, err)
+	}
+	return apiErr
+}
+
+// The API's body verbatim (getmanza/app spec/requests/api/invoices_spec.rb).
+func TestErrorPlanLimitReachedCarriesKindCurrentAndMax(t *testing.T) {
+	apiErr := errorFrom(t, 422, `{"error":{"type":"plan_limit_reached","message":"Plan limit reached for invoices: 10 of 10",`+
+		`"kind":"invoices","current":10,"max":10}}`)
+
+	if apiErr.Kind != manza.KindPlanLimitReached || apiErr.Status != 422 || apiErr.Type != "plan_limit_reached" {
+		t.Fatalf("expected plan_limit_reached/422/plan_limit_reached, got %s/%d/%s", apiErr.Kind, apiErr.Status, apiErr.Type)
+	}
+	if apiErr.Message != "Plan limit reached for invoices: 10 of 10" {
+		t.Fatalf("unexpected message %q", apiErr.Message)
+	}
+	if apiErr.LimitKind != "invoices" || apiErr.LimitCurrent != 10 || apiErr.LimitMax != 10 {
+		t.Fatalf("expected invoices 10 of 10, got %q %d of %d", apiErr.LimitKind, apiErr.LimitCurrent, apiErr.LimitMax)
+	}
+}
+
+func TestErrorOtherValidationIsNotPlanLimitReached(t *testing.T) {
+	apiErr := errorFrom(t, 422, `{"error":{"message":"Customer not found","type":"invalid_request_error","param":"customer_id"}}`)
+
+	if apiErr.Kind != manza.KindValidation || apiErr.Param != "customer_id" {
+		t.Fatalf("expected validation on customer_id, got %s on %q", apiErr.Kind, apiErr.Param)
+	}
+	if apiErr.LimitKind != "" || apiErr.LimitCurrent != 0 || apiErr.LimitMax != 0 {
+		t.Fatalf("expected no plan limit, got %q %d of %d", apiErr.LimitKind, apiErr.LimitCurrent, apiErr.LimitMax)
+	}
+}
+
+// Only a 422 is a plan cap: the same type on another status keeps its kind.
+func TestErrorPlanLimitReachedTypeOnAnotherStatus(t *testing.T) {
+	apiErr := errorFrom(t, 500, `{"error":{"type":"plan_limit_reached","message":"boom","kind":"invoices","current":1,"max":1}}`)
+
+	if apiErr.Kind != manza.KindServer || apiErr.LimitKind != "" {
+		t.Fatalf("expected a server error without a plan limit, got %s (%q)", apiErr.Kind, apiErr.LimitKind)
+	}
+}
+
 func TestDefaultBaseURL(t *testing.T) {
 	var host string
 	transport := roundTripFunc(func(r *http.Request) (*http.Response, error) {

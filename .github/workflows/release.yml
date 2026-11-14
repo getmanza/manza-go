@@ -51,14 +51,17 @@ jobs:
         # pushed by hand reaches here without one.
         run: |
           tag="${GITHUB_REF#refs/tags/}"
+          # The module path carries the major from v2 on (github.com/getmanza/manza-go/v2).
+          module=$(awk '$1 == "module" { print $2; exit }' go.mod)
           if gh release view "$tag" >/dev/null 2>&1; then
             echo "$tag already published"
           else
             gh release create "$tag" --title "$tag" \
-              --notes "See [CHANGELOG.md](https://github.com/${GITHUB_REPOSITORY}/blob/main/CHANGELOG.md). Install: \`go get github.com/getmanza/manza-go@$tag\`"
+              --notes "See [CHANGELOG.md](https://github.com/${GITHUB_REPOSITORY}/blob/main/CHANGELOG.md). Install: \`go get $module@$tag\`"
           fi
 
       - name: Warm the module proxy index
         run: |
           tag="${GITHUB_REF#refs/tags/}"
-          curl -fsSL "https://proxy.golang.org/github.com/getmanza/manza-go/@v/$tag.info" || true
+          module=$(awk '$1 == "module" { print $2; exit }' go.mod)
+          curl -fsSL "https://proxy.golang.org/$module/@v/$tag.info" || true

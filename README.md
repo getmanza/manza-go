@@ -34,8 +34,8 @@ invoice, err := client.Invoices.Create(ctx, manza.Attributes{
     "customer_id":           customerID,
     "account_id":            accountID,
     "currency_code":         "MAD",
-    "issue_date":            "2026-05-03",
-    "due_date":              "2026-06-03",
+    "issue_date":            issueDate, // YYYY-MM-DD, not in a month before your newest numbered invoice
+    "due_date":              dueDate,
     "generate_payment_link": true, // a card payment link, made when approved (payment_links:write)
     "items":                 []map[string]any{{"description": "Consulting", "quantity": 10, "unit_price": "150.00"}},
 })
@@ -243,12 +243,13 @@ approvers.
 
 Non-2xx responses come back as `*manza.Error` with `Status`, `Kind`
 (`manza.KindAuthentication`, `KindForbidden`, `KindNotFound`,
-`KindValidation` for 400 and 422, `KindPlanLimitReached` for a 422 whose
+`KindValidation` for 400 and any other 422, `KindPlanLimitReached` for a 422 whose
 `Type` is `plan_limit_reached`, `KindConflict` for 409, `KindRateLimit`,
 `KindServer`, `KindAPI`), the API's `Type`/`Message`/`Param`, and the
 `RequestID`. A conflict also carries `PaymentID`; a plan limit carries
 `LimitKind` (what is capped, e.g. `invoices`), `LimitCurrent` and `LimitMax`,
-and retrying it does not help. Discriminate on `Kind`, not on status codes:
+and retrying it before the plan changes or its period rolls over does not
+help. Discriminate on `Kind`, not on status codes:
 
 ```go
 var apiErr *manza.Error

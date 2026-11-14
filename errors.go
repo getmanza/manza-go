@@ -13,7 +13,7 @@ const (
 	KindAuthentication = "authentication" // 401
 	KindForbidden      = "forbidden"      // 403
 	KindNotFound       = "not_found"      // 404
-	KindValidation     = "validation"     // 400, 422
+	KindValidation     = "validation"     // 400, and 422 other than plan_limit_reached
 	// KindPlanLimitReached is a 422 whose type is plan_limit_reached: the
 	// entity's plan caps this kind of record and the cap is reached (the
 	// other SDKs' PlanLimitReachedError, a validation subclass). Retrying

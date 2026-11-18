@@ -1,0 +1,44 @@
+README.md
+  s_5418b9d6e19a79::t_8ea77c4a6efc08 100-135
+resources.go
+  ai_agent 466-472,477-506
+listeners_test.go
+  s_5418b9d6e19a79::t_e9ef71c41a370a 1-549
+listeners.go
+  s_5418b9d6e19a79::t_fa7fc407e504d8 1-201,208-211,213-214,216-221,223-225
+  s_5418b9d6e19a79::t_690d465f1aef11 202-207,212,215,222
+client.go
+  s_5418b9d6e19a79::t_ad61faa60ab0d7 14,51-54,106,108,149,183-219,224-227
+  s_5418b9d6e19a79::t_dd70fde2863518 220-223
+CHANGELOG.md
+  s_5418b9d6e19a79::t_8ea77c4a6efc08 10-19
+webhook.go
+  ai_agent 67-90
+types.go
+  ai_agent 3-4
+  s_5418b9d6e19a79::t_690d465f1aef11 221-266
+deliveries_test.go
+  s_5418b9d6e19a79::t_e3dce5174b63c3 1-142
+AGENTS.md
+  s_5418b9d6e19a79::t_8ea77c4a6efc08 54,59-60
+webhook_test.go
+  s_5418b9d6e19a79::t_b788bae5777515 209-269
+export_test.go
+  s_5418b9d6e19a79::t_71848189dcbd39 5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "442ef7862f2a67d0020d5c4a548a8441b81e14d1",
+  "prompts": {},
+  "sessions": {
+    "s_5418b9d6e19a79": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b2c1bf8d-5363-4ea3-9b2d-22ded1558070",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}

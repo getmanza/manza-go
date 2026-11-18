@@ -21,7 +21,7 @@ import (
 
 const (
 	// Version is the SDK version, sent in the User-Agent header.
-	Version = "2.0.0"
+	Version = "2.0.1"
 
 	defaultBaseURL = "https://ma.manza.finance"
 	defaultTimeout = 30 * time.Second

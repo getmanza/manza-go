@@ -7,6 +7,16 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Added
+
+- `WebhookListeners` (`POST`/`DELETE /api/webhook_listeners`): `Create(ctx, WebhookListenerParams{Events, Authorizer})` and `Delete` open and close a listen session (decode onto `WebhookListener`: `ID`, `Events`, `Authorizer`, `ExpiresAt`, `StreamURL`, `SigningSecret`). No `Events` sends `[]`: every subscribable event
+- `WebhookListeners.Stream(ctx, listener, WebhookListenerStreamOptions{LastEventID})`: an `iter.Seq2[ListenerEvent, error]` over the session's server-sent events. Each `ListenerEvent` carries `ID` (the delivery), `EventType`, `EventID`, `Body` (the exact bytes to forward) and `StreamID`. A dropped connection is reopened with `Last-Event-ID`, backing off from 500ms to 10s; 429, 5xx and transport errors after the stream opened are retried. It ends on `listener_closed`, on `ctx` (quietly), or with one error: `*Error` for any other 4xx (an expired session is `KindNotFound`), a failed first connect, or `*ArgumentError` for a `stream_url` off the API host. Heartbeats and `pgbus:*` control frames are skipped. The stream ignores the HTTP client's `Timeout`
+- `WebhookHeaders(secret, eventType, eventID, deliveryID, body, now)`: a platform delivery's signed headers (`X-Manza-Signature`, `-Timestamp`, `-Event`, `-Event-Id`, `-Delivery-Id`, each also as `X-Zazu-*`), the inverse of `ConstructWebhookEvent`. `SignWebhook` keeps its 2.0 signature
+- `WebhookDeliveries`: `List(ctx, endpointID, WebhookDeliveryListParams{Status})` (`GET /api/webhook_endpoints/:id/deliveries`), `Get` (`payload`, `response_body`), `Retry` (202 `{delivery_id, status: "queued"}`; a refused retry is a `KindValidation` error of type `state_error`). Decode onto `WebhookDelivery`
+- `WebhookEndpoints.RetryFailed` (`POST /api/webhook_endpoints/:id/retry_failed`, 202 `{status: "queued", count}`)
+
+The listener and delivery endpoints are tested against `httptest`: manza-ruby has no cassettes for them yet.
+
 ## [2.0.0] - 2026-11-14
 
 Ports manza-ruby 2.0.0: synced to the Manza API at getmanza/app `906ec486e5`

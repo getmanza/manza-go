@@ -64,6 +64,30 @@ func SignWebhook(payload []byte, timestamp, secret string) string {
 	return hex.EncodeToString(mac.Sum(nil))
 }
 
+// WebhookHeaders returns the headers of a delivery of body signed with
+// secret at now, exactly as the platform sends them: X-Manza-Signature
+// (SignWebhook over "<unix seconds>.<body>"), X-Manza-Timestamp,
+// X-Manza-Event, X-Manza-Event-Id and X-Manza-Delivery-Id, each also under
+// the legacy X-Zazu-* name. ConstructWebhookEvent verifies the result. A
+// local forwarder (`manza listen`) signs each ListenerEvent with it at
+// forward time, using the session's SigningSecret.
+func WebhookHeaders(secret, eventType, eventID, deliveryID string, body []byte, now time.Time) http.Header {
+	timestamp := strconv.FormatInt(now.Unix(), 10)
+	values := map[string]string{
+		"Signature":   SignWebhook(body, timestamp, secret),
+		"Timestamp":   timestamp,
+		"Event":       eventType,
+		"Event-Id":    eventID,
+		"Delivery-Id": deliveryID,
+	}
+	header := http.Header{}
+	for suffix, value := range values {
+		header.Set("X-Manza-"+suffix, value)
+		header.Set("X-Zazu-"+suffix, value)
+	}
+	return header
+}
+
 // VerifyWebhook reports whether signature matches payload and timestamp
 // under secret (compared in constant time) and timestamp is within the
 // tolerance of now. An empty secret, or a timestamp that is not an integer,

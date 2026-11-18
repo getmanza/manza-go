@@ -206,3 +206,64 @@ func TestConstructWebhookEventResolvesDuplicateHeaderNamesDeterministically(t *t
 		}
 	}
 }
+
+// Independent vector for the forwarding signer:
+//
+//	printf '1767225600.{}' | openssl dgst -sha256 -hmac s
+func TestSignWebhookSignsTheForwardingVector(t *testing.T) {
+	const want = "ba9170a5544f572ac4aa337998ae8489ca81af27f3b3dda2661111814a9dd771"
+	if got := manza.SignWebhook([]byte("{}"), "1767225600", "s"); got != want {
+		t.Fatalf("signature %s, want %s", got, want)
+	}
+}
+
+func TestWebhookHeadersSignAndNameTheDeliveryUnderBothPrefixes(t *testing.T) {
+	header := manza.WebhookHeaders("s", "transfer.executed", "evt_1", "del_1", []byte("{}"), webhookNow)
+
+	want := map[string]string{
+		"Signature":   "ba9170a5544f572ac4aa337998ae8489ca81af27f3b3dda2661111814a9dd771",
+		"Timestamp":   "1767225600",
+		"Event":       "transfer.executed",
+		"Event-Id":    "evt_1",
+		"Delivery-Id": "del_1",
+	}
+	for suffix, value := range want {
+		for _, prefix := range []string{"X-Manza-", "X-Zazu-"} {
+			if got := header.Get(prefix + suffix); got != value {
+				t.Errorf("%s%s = %q, want %q", prefix, suffix, got, value)
+			}
+		}
+	}
+	if len(header) != 2*len(want) {
+		t.Errorf("header has %d names, want %d: %v", len(header), 2*len(want), header)
+	}
+}
+
+// WebhookHeaders is the inverse of ConstructWebhookEvent, under either prefix,
+// over a body whose exact bytes matter.
+func TestWebhookHeadersRoundTripThroughConstructWebhookEvent(t *testing.T) {
+	body := `{"event":"transfer.executed", "b":1,"a":"<x>"}`
+	header := manza.WebhookHeaders("lsec_1", "transfer.executed", "evt_1", "del_1", []byte(body), webhookNow)
+
+	event, err := constructEvent(t, body, header, "lsec_1")
+	if err != nil {
+		t.Fatalf("construct: %v", err)
+	}
+	if event["event"] != "transfer.executed" {
+		t.Fatalf("unexpected event %#v", event)
+	}
+
+	legacy := http.Header{}
+	for name, values := range header {
+		if strings.HasPrefix(name, "X-Zazu-") {
+			legacy[name] = values
+		}
+	}
+	if _, err := constructEvent(t, body, legacy, "lsec_1"); err != nil {
+		t.Fatalf("construct from X-Zazu-* only: %v", err)
+	}
+
+	if _, err := constructEvent(t, body+" ", header, "lsec_1"); err == nil {
+		t.Fatal("a changed body still verified")
+	}
+}

@@ -111,11 +111,16 @@ is signed, so your handler's `ConstructWebhookEvent` accepts it.
 
 ```go
 resp, err := client.WebhookListeners.Create(ctx, manza.WebhookListenerParams{
-    Events:     []string{"transfer.executed"}, // none: every subscribable event
-    Authorizer: true,                          // also mirror payment.authorization_requested
+    Events:     []string{"transfer.executed"}, // leave out for every subscribable event
+    Authorizer: true,                          // mirror payment.authorization_requested; needs transfers:authorize on this key
 })
+if err != nil {
+    return err
+}
 var listener manza.WebhookListener
-err = resp.Decode(&listener)
+if err := resp.Decode(&listener); err != nil {
+    return err
+}
 defer client.WebhookListeners.Delete(context.Background(), listener.ID)
 
 for event, err := range client.WebhookListeners.Stream(ctx, listener, manza.WebhookListenerStreamOptions{}) {
@@ -128,11 +133,12 @@ for event, err := range client.WebhookListeners.Stream(ctx, listener, manza.Webh
 ```
 
 `Stream` reopens a dropped connection with `Last-Event-ID`, backing off from
-500ms to 10s (at least a 429's `Retry-After`), so no event is lost or
-repeated (the server keeps about five minutes). It ends on the server's
-`listener_closed`, when `ctx` is done, or with one error: a 4xx other than
-429, a first connect that fails (a 2xx that is not `text/event-stream`
-included), a webhook frame missing its fields, or a `stream_url` that is not
+500ms to 10s (at least a 429's `Retry-After` in seconds), so no event the
+server still keeps (about five minutes) is lost or repeated; a longer outage
+ends with an expired session. It ends on the server's `listener_closed`, when
+`ctx` is done, or with one error: a redirect (never followed), a 4xx other
+than 429, a first connect that fails, a 2xx that is not `text/event-stream`,
+a webhook frame missing its fields, or a `stream_url` that is not
 on the client's API host (the API key is never sent elsewhere). It ignores the HTTP client's `Timeout`; `ctx` bounds the stream.
 
 ## Machine-authorized transfers

@@ -69,15 +69,16 @@ type WebhookListenerStreamOptions struct {
 //	}
 //
 // A dropped connection is reopened with Last-Event-ID, backing off from
-// 500ms to 10s (at least a 429's Retry-After), so no frame is lost or
-// repeated. The backoff resets only after a connection delivered a webhook
-// or stayed up for 10s. The stream ends on a
+// 500ms to 10s (at least a 429's Retry-After in seconds), so no frame the
+// server still keeps (about 5 minutes) is lost or repeated. The backoff
+// resets only after a connection delivered a webhook or stayed up for 10s. The stream ends on a
 // listener_closed frame, when ctx is done (without an error), or with one
 // yielded error:
-//   - *Error for a 4xx other than 429; an expired session answers the
+//   - *Error for a 3xx (redirects are not followed) or a 4xx other than
+//     429; an expired session answers the
 //     reconnect with KindNotFound, so create a new one;
-//   - the first connect failing in any way, before any stream opened
-//     (*ConnectionError for a 2xx that is not text/event-stream);
+//   - the first connect failing in any way, before any stream opened;
+//   - a 2xx that is not text/event-stream;
 //   - *ArgumentError when listener.StreamURL is not on the client's API host
 //     (the API key is never sent elsewhere);
 //   - a webhook frame whose data is not JSON carrying id, event_type,

@@ -193,7 +193,7 @@ func (c *Client) setHeaders(req *http.Request, accept string) {
 
 // openStream opens a server-sent event stream with a GET on target, an
 // absolute URL. It returns the open response for the caller to read and
-// close, or *Error for a non-2xx answer. The configured client's Timeout
+// close, or *Error for a non-2xx answer (redirects are not followed). The configured client's Timeout
 // would cut the stream (it covers reading the body), so the request goes
 // through a copy without one; ctx ends it.
 func (c *Client) openStream(ctx context.Context, target, lastEventID string) (*http.Response, error) {
@@ -209,6 +209,9 @@ func (c *Client) openStream(ctx context.Context, target, lastEventID string) (*h
 
 	streaming := *c.httpClient
 	streaming.Timeout = 0
+	// Never follow a redirect: it could carry the API key to another host
+	// or port. The 3xx comes back as an *Error and ends the stream.
+	streaming.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	raw, err := streaming.Do(req)
 	if err != nil {
 		return nil, &ConnectionError{Message: err.Error()}
@@ -217,7 +220,8 @@ func (c *Client) openStream(ctx context.Context, target, lastEventID string) (*h
 		mediaType, _, err := mime.ParseMediaType(raw.Header.Get("Content-Type"))
 		if err != nil || mediaType != "text/event-stream" {
 			raw.Body.Close()
-			return nil, &ConnectionError{Message: fmt.Sprintf("stream answered %d with Content-Type %q, not text/event-stream", raw.StatusCode, raw.Header.Get("Content-Type"))}
+			// Not a ConnectionError: a misrouted answer is not retried.
+			return nil, fmt.Errorf("manza: stream answered %d with Content-Type %q, not text/event-stream", raw.StatusCode, raw.Header.Get("Content-Type"))
 		}
 		return raw, nil
 	}

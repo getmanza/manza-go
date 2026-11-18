@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -512,9 +513,15 @@ func TestStreamRefusesAStreamURLOnAnotherHost(t *testing.T) {
 	var connections atomic.Int32
 	other := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { connections.Add(1) }))
 	t.Cleanup(other.Close)
-	client, _ := listenerClient(t, func(w http.ResponseWriter, r *http.Request) { connections.Add(1) })
+	client, server := listenerClient(t, func(w http.ResponseWriter, r *http.Request) { connections.Add(1) })
 
-	for _, streamURL := range []string{other.URL + "/api/webhook_listeners/stream", "", "://bad"} {
+	offHost := []string{
+		other.URL + "/api/webhook_listeners/stream",                                                // another port
+		strings.Replace(server.URL, "127.0.0.1", "localhost", 1) + "/api/webhook_listeners/stream", // another host
+		strings.Replace(server.URL, "http://", "https://", 1) + "/api/webhook_listeners/stream",    // another scheme
+		"", "://bad",
+	}
+	for _, streamURL := range offHost {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		result := collect(ctx, client, manza.WebhookListener{StreamURL: streamURL}, manza.WebhookListenerStreamOptions{})
 		cancel()
@@ -683,9 +690,8 @@ func TestStreamRefusesAResponseThatIsNotAnEventStream(t *testing.T) {
 	})
 
 	result := collectWithin(t, 5*time.Second, client, manza.WebhookListenerStreamOptions{})
-	var connErr *manza.ConnectionError
-	if len(result.errs) != 1 || !errors.As(result.errs[0], &connErr) {
-		t.Fatalf("errors = %v, want one *ConnectionError", result.errs)
+	if len(result.errs) != 1 || !strings.Contains(result.errs[0].Error(), "not text/event-stream") {
+		t.Fatalf("errors = %v, want one not-an-event-stream error", result.errs)
 	}
 	if connections.Load() != 1 {
 		t.Errorf("connections = %d, want 1", connections.Load())
@@ -745,8 +751,9 @@ func TestStreamResetsTheBackoffAfterALongLivedQuietConnection(t *testing.T) {
 	}
 }
 
-// After the stream opened, a 2xx that is not an event stream is retried.
-func TestStreamRetriesAResponseThatIsNotAnEventStreamAfterOpening(t *testing.T) {
+// After the stream opened, a 2xx that is not an event stream still ends it:
+// retrying a misrouted answer would never recover.
+func TestStreamEndsOnAResponseThatIsNotAnEventStreamAfterOpening(t *testing.T) {
 	fastBackoff(t)
 	var connections atomic.Int32
 	client, _ := listenerClient(t, func(w http.ResponseWriter, r *http.Request) {
@@ -754,20 +761,36 @@ func TestStreamRetriesAResponseThatIsNotAnEventStreamAfterOpening(t *testing.T) 
 		case 1:
 			startSSE(w)
 			writeSSE(w, webhookFrame("1", "evt_1"))
-		case 2:
+		default:
 			w.Header().Set("Content-Type", "text/html")
 			io.WriteString(w, "<html></html>")
-		default:
-			startSSE(w)
-			writeSSE(w, webhookFrame("2", "evt_2"), closedFrame)
 		}
 	})
 
 	result := collectWithin(t, 5*time.Second, client, manza.WebhookListenerStreamOptions{})
-	if len(result.errs) != 0 {
-		t.Fatalf("errors: %v", result.errs)
+	if len(result.events) != 1 || len(result.errs) != 1 {
+		t.Fatalf("result = %+v, want one event then one error", result)
 	}
-	if got := eventIDs(result.events); got != "[evt_1 evt_2]" {
-		t.Errorf("events = %s", got)
+	if connections.Load() != 2 {
+		t.Errorf("connections = %d, want 2", connections.Load())
+	}
+}
+
+// A redirect is never followed: it could carry the API key to another port
+// or host.
+func TestStreamDoesNotFollowARedirect(t *testing.T) {
+	var redirected atomic.Int32
+	other := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { redirected.Add(1) }))
+	t.Cleanup(other.Close)
+	client, _ := listenerClient(t, func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, other.URL+"/stream", http.StatusTemporaryRedirect)
+	})
+
+	result := collectWithin(t, 5*time.Second, client, manza.WebhookListenerStreamOptions{})
+	if len(result.errs) != 1 {
+		t.Fatalf("errors = %v, want one", result.errs)
+	}
+	if redirected.Load() != 0 {
+		t.Errorf("the redirect was followed %d times", redirected.Load())
 	}
 }

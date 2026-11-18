@@ -1,0 +1,28 @@
+CHANGELOG.md
+  s_5418b9d6e19a79::t_9a8fe701a30cef 12-13
+listeners.go
+  ai_agent 73-74
+  s_5418b9d6e19a79::t_9a8fe701a30cef 72,77-78,80-81
+README.md
+  s_5418b9d6e19a79::t_9a8fe701a30cef 114-115,117-119,121-123,136-141
+client.go
+  s_5418b9d6e19a79::t_9a8fe701a30cef 196,212-214,223-224
+listeners_test.go
+  s_5418b9d6e19a79::t_9f4cdacaf5de0d 10,516,518-524,693-694,754-756,764,771-772,774-794
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "d75695c8a6dc06b09138504e7cce29387b525192",
+  "prompts": {},
+  "sessions": {
+    "s_5418b9d6e19a79": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b2c1bf8d-5363-4ea3-9b2d-22ded1558070",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}

@@ -1,0 +1,35 @@
+listeners.go
+  s_5418b9d6e19a79::t_1142f9672aee3a 72-73,78-79,82-83
+  s_5418b9d6e19a79::t_a8878feedc2aa2 190-192
+  s_5418b9d6e19a79::t_a920558b1601b3 10,105,111-114,117,121-125,131,138-144,153,162-164,169-175,193,200-202,209,238-240,243-244,246,248-249,252,259-270
+listeners_test.go
+  s_5418b9d6e19a79::t_b99af7c07a2737 550-711
+listeners_internal_test.go
+  s_5418b9d6e19a79::t_b99af7c07a2737 1-38
+export_test.go
+  s_5418b9d6e19a79::t_b99af7c07a2737 34-38
+AGENTS.md
+  s_5418b9d6e19a79::t_1142f9672aee3a 59-60
+README.md
+  s_5418b9d6e19a79::t_1142f9672aee3a 131-136
+CHANGELOG.md
+  s_5418b9d6e19a79::t_1142f9672aee3a 13
+client.go
+  s_5418b9d6e19a79::t_a920558b1601b3 15,217-221
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "255866b4579d357f17e7d00dcd858c545fa91025",
+  "prompts": {},
+  "sessions": {
+    "s_5418b9d6e19a79": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b2c1bf8d-5363-4ea3-9b2d-22ded1558070",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}

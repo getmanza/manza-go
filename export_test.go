@@ -2,6 +2,7 @@ package manza
 
 import (
 	"io"
+	"time"
 )
 
 // SetWarnWriter redirects deprecation warnings and re-arms the once-only
@@ -23,3 +24,15 @@ func SetWarnWriter(w io.Writer) func() {
 func (c *Client) APIKeyForTest() string     { return c.apiKey }
 func (c *Client) BaseURLForTest() string    { return c.baseURL }
 func (c *Client) APIVersionForTest() string { return c.apiVersion }
+
+// SetStreamBackoff shortens Stream's reconnect backoff. It returns a restore func.
+func SetStreamBackoff(initial, max time.Duration) func() {
+	prevInitial, prevMax := streamBackoffInitial, streamBackoffMax
+	streamBackoffInitial, streamBackoffMax = initial, max
+	return func() { streamBackoffInitial, streamBackoffMax = prevInitial, prevMax }
+}
+
+// StreamBackoffDefaults returns Stream's reconnect backoff bounds.
+func StreamBackoffDefaults() (initial, max time.Duration) {
+	return streamBackoffInitial, streamBackoffMax
+}

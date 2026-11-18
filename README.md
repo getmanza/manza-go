@@ -97,7 +97,49 @@ is sent as the `Manza-Version` header on every request.
 | `Payments` | `Create` (optional `transfer_method`), `Get` (`authorization`: status, `refusal_reason`), `Authorize`, `Decline` |
 | `TransferAuthorizer` | `Get` (status, `suspension_reason`, limits, `daily_authorized_total`, `trust_new_payees`, `new_payee_limit`; a not-found `*manza.Error` when none is enrolled) |
 | `TransferDrafts` | Deprecated alias of `Payments` (the same service; it calls `/api/payments`) |
-| `WebhookEndpoints` | `List`, `Get`, `Create`, `Update`, `Delete`, `Test`, `RegenerateSecret`, `Enable`, `Disable` |
+| `WebhookDeliveries` | `List(ctx, endpointID, params)` (`Status` filter: `failed`, `pending`, `succeeded`), `Get` (adds `payload`, `response_body`), `Retry` |
+| `WebhookEndpoints` | `List`, `Get`, `Create`, `Update`, `Delete`, `Test`, `RegenerateSecret`, `Enable`, `Disable`, `RetryFailed` |
+| `WebhookListeners` | `Create`, `Delete`, `Stream` (see [Listening for webhooks locally](#listening-for-webhooks-locally)) |
+
+## Listening for webhooks locally
+
+A listen session streams a copy of every subscribed webhook to your machine,
+with no public endpoint or tunnel: the engine behind `manza listen`. The
+server sends each body unsigned; sign it at forward time with the session's
+`SigningSecret` (the API key's listen secret), exactly as a platform delivery
+is signed, so your handler's `ConstructWebhookEvent` accepts it.
+
+```go
+resp, err := client.WebhookListeners.Create(ctx, manza.WebhookListenerParams{
+    Events:     []string{"transfer.executed"}, // leave out for every subscribable event
+    Authorizer: true,                          // mirror payment.authorization_requested; needs transfers:authorize on this key
+})
+if err != nil {
+    return err
+}
+var listener manza.WebhookListener
+if err := resp.Decode(&listener); err != nil {
+    return err
+}
+defer client.WebhookListeners.Delete(context.Background(), listener.ID)
+
+for event, err := range client.WebhookListeners.Stream(ctx, listener, manza.WebhookListenerStreamOptions{}) {
+    if err != nil {
+        return err // the stream has ended; a not-found *manza.Error means the session expired
+    }
+    header := manza.WebhookHeaders(listener.SigningSecret, event.EventType, event.EventID, event.ID, event.Body, time.Now())
+    // POST event.Body (the exact bytes, never re-serialized) with header to your local server
+}
+```
+
+`Stream` reopens a dropped connection with `Last-Event-ID`, backing off from
+500ms to 10s (at least a 429's `Retry-After` in seconds), so no event the
+server still keeps (about five minutes) is lost or repeated; a longer outage
+ends with an expired session. It ends on the server's `listener_closed`, when
+`ctx` is done, or with one error: a redirect (never followed), a 4xx other
+than 429, a first connect that fails, a 2xx that is not `text/event-stream`,
+a webhook frame missing its fields, or a `stream_url` that is not
+on the client's API host (the API key is never sent elsewhere). It ignores the HTTP client's `Timeout`; `ctx` bounds the stream.
 
 ## Machine-authorized transfers
 

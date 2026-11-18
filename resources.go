@@ -463,7 +463,45 @@ func (s *WebhookEndpointsService) Enable(ctx context.Context, id string) (*Respo
 	return s.client.post(ctx, encodePath("api/webhook_endpoints", id, "enable"), nil)
 }
 
+// RetryFailed calls POST /api/webhook_endpoints/:id/retry_failed, queueing
+// every failed delivery of the endpoint again. It answers 202
+// {status: "queued", count}.
+func (s *WebhookEndpointsService) RetryFailed(ctx context.Context, id string) (*Response, error) {
+	return s.client.post(ctx, encodePath("api/webhook_endpoints", id, "retry_failed"), nil)
+}
+
 // Disable calls POST /api/webhook_endpoints/:id/disable.
 func (s *WebhookEndpointsService) Disable(ctx context.Context, id string) (*Response, error) {
 	return s.client.post(ctx, encodePath("api/webhook_endpoints", id, "disable"), nil)
+}
+
+// WebhookDeliveriesService — the deliveries of webhooks to an endpoint, and
+// their retries. Decode a row or a Get response onto WebhookDelivery.
+type WebhookDeliveriesService struct{ client *Client }
+
+// WebhookDeliveryListParams filters GET /api/webhook_endpoints/:id/deliveries.
+// Status is failed, pending or succeeded.
+type WebhookDeliveryListParams struct {
+	ListParams
+	Status string
+}
+
+// List calls GET /api/webhook_endpoints/:endpoint_id/deliveries.
+func (s *WebhookDeliveriesService) List(ctx context.Context, endpointID string, params WebhookDeliveryListParams) (*Page, error) {
+	base := url.Values{}
+	setIfPresent(base, "status", params.Status)
+	return s.client.listPage(ctx, encodePath("api/webhook_endpoints", endpointID, "deliveries"), base, params.ListParams)
+}
+
+// Get calls GET /api/webhook_deliveries/:id; the response adds payload and
+// response_body.
+func (s *WebhookDeliveriesService) Get(ctx context.Context, id string) (*Response, error) {
+	return s.client.get(ctx, encodePath("api/webhook_deliveries", id), nil)
+}
+
+// Retry calls POST /api/webhook_deliveries/:id/retry. It answers 202
+// {delivery_id, status: "queued"}; a delivery that cannot be retried is a
+// KindValidation *Error of type state_error, the reason in Message.
+func (s *WebhookDeliveriesService) Retry(ctx context.Context, id string) (*Response, error) {
+	return s.client.post(ctx, encodePath("api/webhook_deliveries", id, "retry"), nil)
 }

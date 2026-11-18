@@ -11,6 +11,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"mime"
 	"net/http"
 	"net/url"
 	"strings"
@@ -47,8 +49,10 @@ type Client struct {
 	TransferAuthorizer *TransferAuthorizerService
 	// Deprecated: use Payments. Kept for all of 1.x; it is the same service
 	// and calls /api/payments.
-	TransferDrafts   *TransferDraftsService
-	WebhookEndpoints *WebhookEndpointsService
+	TransferDrafts    *TransferDraftsService
+	WebhookDeliveries *WebhookDeliveriesService
+	WebhookEndpoints  *WebhookEndpointsService
+	WebhookListeners  *WebhookListenersService
 }
 
 // Option configures a Client.
@@ -100,7 +104,9 @@ func New(opts ...Option) (*Client, error) {
 	c.Payments = &PaymentsService{client: c}
 	c.TransferAuthorizer = &TransferAuthorizerService{client: c}
 	c.TransferDrafts = c.Payments
+	c.WebhookDeliveries = &WebhookDeliveriesService{client: c}
 	c.WebhookEndpoints = &WebhookEndpointsService{client: c}
+	c.WebhookListeners = &WebhookListenersService{client: c}
 	return c, nil
 }
 
@@ -141,14 +147,9 @@ func (c *Client) Request(ctx context.Context, method, path string, params url.Va
 	if err != nil {
 		return nil, fmt.Errorf("manza: build request: %w", err)
 	}
-	req.Header.Set("Authorization", "Bearer "+c.apiKey)
-	req.Header.Set("User-Agent", "manza-go/"+Version)
-	req.Header.Set("Accept", "application/json")
+	c.setHeaders(req, "application/json")
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
-	}
-	if c.apiVersion != "" {
-		req.Header.Set("Manza-Version", c.apiVersion)
 	}
 
 	raw, err := c.httpClient.Do(req)
@@ -178,6 +179,62 @@ func (c *Client) Request(ctx context.Context, method, path string, params url.Va
 		Body:      parsed,
 		Raw:       buf.Bytes(),
 	}, nil
+}
+
+// setHeaders sets the headers every API request carries.
+func (c *Client) setHeaders(req *http.Request, accept string) {
+	req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	req.Header.Set("User-Agent", "manza-go/"+Version)
+	req.Header.Set("Accept", accept)
+	if c.apiVersion != "" {
+		req.Header.Set("Manza-Version", c.apiVersion)
+	}
+}
+
+// openStream opens a server-sent event stream with a GET on target, an
+// absolute URL. It returns the open response for the caller to read and
+// close, or *Error for a non-2xx answer (redirects are not followed). The configured client's Timeout
+// would cut the stream (it covers reading the body), so the request goes
+// through a copy without one; ctx ends it.
+func (c *Client) openStream(ctx context.Context, target, lastEventID string) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
+	if err != nil {
+		return nil, fmt.Errorf("manza: build request: %w", err)
+	}
+	c.setHeaders(req, "text/event-stream")
+	req.Header.Set("Cache-Control", "no-cache")
+	if lastEventID != "" {
+		req.Header.Set("Last-Event-ID", lastEventID)
+	}
+
+	streaming := *c.httpClient
+	streaming.Timeout = 0
+	// Never follow a redirect: it could carry the API key to another host
+	// or port. The 3xx comes back as an *Error and ends the stream.
+	streaming.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	raw, err := streaming.Do(req)
+	if err != nil {
+		return nil, &ConnectionError{Message: err.Error()}
+	}
+	if raw.StatusCode >= 200 && raw.StatusCode < 300 {
+		mediaType, _, err := mime.ParseMediaType(raw.Header.Get("Content-Type"))
+		if err != nil || mediaType != "text/event-stream" {
+			raw.Body.Close()
+			// Not a ConnectionError: a misrouted answer is not retried.
+			return nil, fmt.Errorf("manza: stream answered %d with Content-Type %q, not text/event-stream", raw.StatusCode, raw.Header.Get("Content-Type"))
+		}
+		return raw, nil
+	}
+
+	defer raw.Body.Close()
+	body, err := io.ReadAll(io.LimitReader(raw.Body, 64<<10))
+	if err != nil {
+		return nil, &ConnectionError{Message: "read response body: " + err.Error()}
+	}
+	parsed := map[string]any{}
+	// Non-JSON error bodies stay raw; parsed stays empty.
+	_ = json.Unmarshal(body, &parsed)
+	return nil, newError(raw.StatusCode, raw.Header, parsed)
 }
 
 func (c *Client) get(ctx context.Context, path string, params url.Values) (*Response, error) {

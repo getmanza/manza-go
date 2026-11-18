@@ -1,5 +1,7 @@
 package manza
 
+import "encoding/json"
+
 // Typed response models. Decode a *Response onto one with Response.Decode.
 // Field names are the API's snake_case keys. Pointers mark values that can
 // be null or absent; timestamps and decimal amounts stay strings, exactly as
@@ -215,4 +217,50 @@ type InvoiceAccount struct {
 	CurrencyCode  string  `json:"currency_code"`
 	RIB           *string `json:"rib,omitempty"`
 	AccountNumber *string `json:"account_number,omitempty"`
+}
+
+// WebhookListener is a listen session: the response of
+// WebhookListenersService.Create. SigningSecret is the API key's listen
+// secret, the same on every session of that key: sign forwarded bodies with
+// it (WebhookHeaders).
+type WebhookListener struct {
+	ID            string   `json:"id"`
+	Events        []string `json:"events"` // empty: every subscribable event
+	Authorizer    bool     `json:"authorizer"`
+	ExpiresAt     string   `json:"expires_at"`
+	StreamURL     string   `json:"stream_url"`
+	SigningSecret string   `json:"signing_secret"`
+}
+
+// ListenerEvent is one webhook frame of WebhookListenersService.Stream. ID is
+// the delivery id, Body the exact bytes to forward (never re-serialize them:
+// the signature covers these bytes), and StreamID the frame's SSE id, which
+// WebhookListenerStreamOptions.LastEventID resumes after.
+type ListenerEvent struct {
+	ID        string
+	EventType string
+	EventID   string
+	Body      []byte
+	StreamID  string
+}
+
+// WebhookDelivery is one attempt series of a webhook to an endpoint: a row of
+// WebhookDeliveriesService.List, or the response of Get, which adds Payload
+// (the JSON sent) and ResponseBody.
+type WebhookDelivery struct {
+	ID              string          `json:"id"`
+	EndpointID      string          `json:"endpoint_id"`
+	EventType       string          `json:"event_type"`
+	EventID         string          `json:"event_id"`
+	Status          string          `json:"status"` // pending, succeeded, failed
+	Attempts        int             `json:"attempts"`
+	MaxAttempts     int             `json:"max_attempts"`
+	ResponseCode    *int            `json:"response_code"`
+	ResponseTimeMs  *int            `json:"response_time_ms"`
+	NextAttemptAt   *string         `json:"next_attempt_at"`
+	LastAttemptedAt *string         `json:"last_attempted_at"`
+	CompletedAt     *string         `json:"completed_at"`
+	CreatedAt       string          `json:"created_at"`
+	Payload         json.RawMessage `json:"payload,omitempty"`
+	ResponseBody    *string         `json:"response_body,omitempty"`
 }

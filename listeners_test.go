@@ -547,3 +547,165 @@ func onlyAPIError(t *testing.T, result streamResult) *manza.Error {
 	}
 	return apiErr
 }
+
+func TestStreamBackoffDefaults(t *testing.T) {
+	initial, max := manza.StreamBackoffDefaults()
+	if initial != 500*time.Millisecond || max != 10*time.Second {
+		t.Errorf("backoff = %s..%s, want 500ms..10s", initial, max)
+	}
+}
+
+// A server that answers 200 and closes at once must not be redialled at a
+// flat rate: the backoff resets only after a frame arrived.
+func TestStreamBacksOffWhenAnOpenedStreamDropsWithoutAFrame(t *testing.T) {
+	t.Cleanup(manza.SetStreamBackoff(20*time.Millisecond, 80*time.Millisecond))
+	var connections atomic.Int32
+	var at []time.Time
+	client, _ := listenerClient(t, func(w http.ResponseWriter, r *http.Request) {
+		at = append(at, time.Now())
+		startSSE(w)
+		switch n := connections.Add(1); {
+		case n == 1:
+			writeSSE(w, webhookFrame("1", "evt_1"))
+		case n == 6:
+			writeSSE(w, closedFrame)
+		default:
+			writeSSE(w, ": heartbeat\n\n")
+		}
+	})
+
+	result := collectWithin(t, 5*time.Second, client, manza.WebhookListenerStreamOptions{})
+	if len(result.errs) != 0 || len(result.events) != 1 {
+		t.Fatalf("result = %+v", result)
+	}
+	want := []time.Duration{20, 40, 80, 80, 80}
+	for i, min := range want {
+		if gap := at[i+1].Sub(at[i]); gap < min*time.Millisecond {
+			t.Errorf("gap %d = %s, want at least %dms", i+1, gap, min)
+		}
+	}
+}
+
+func TestStreamWaitsForRetryAfterOnARateLimit(t *testing.T) {
+	fastBackoff(t)
+	var connections atomic.Int32
+	var limitedAt, retriedAt time.Time
+	client, _ := listenerClient(t, func(w http.ResponseWriter, r *http.Request) {
+		switch connections.Add(1) {
+		case 1:
+			startSSE(w)
+			writeSSE(w, webhookFrame("1", "evt_1"))
+		case 2:
+			limitedAt = time.Now()
+			w.Header().Set("Retry-After", "1")
+			w.WriteHeader(http.StatusTooManyRequests)
+		default:
+			retriedAt = time.Now()
+			startSSE(w)
+			writeSSE(w, webhookFrame("2", "evt_2"), closedFrame)
+		}
+	})
+
+	result := collectWithin(t, 5*time.Second, client, manza.WebhookListenerStreamOptions{})
+	if len(result.errs) != 0 {
+		t.Fatalf("errors: %v", result.errs)
+	}
+	if got := eventIDs(result.events); got != "[evt_1 evt_2]" {
+		t.Errorf("events = %s", got)
+	}
+	if gap := retriedAt.Sub(limitedAt); gap < time.Second {
+		t.Errorf("retried %s after a 429 with Retry-After: 1", gap)
+	}
+}
+
+func TestStreamEndsWithForbiddenWithoutRetrying(t *testing.T) {
+	fastBackoff(t)
+	var connections atomic.Int32
+	client, _ := listenerClient(t, func(w http.ResponseWriter, r *http.Request) {
+		if connections.Add(1) == 1 {
+			startSSE(w)
+			writeSSE(w, webhookFrame("1", "evt_1"))
+			return
+		}
+		w.WriteHeader(http.StatusForbidden)
+	})
+
+	result := collectWithin(t, 5*time.Second, client, manza.WebhookListenerStreamOptions{})
+	if apiErr := onlyAPIError(t, result); apiErr.Kind != manza.KindForbidden {
+		t.Errorf("kind = %s, want forbidden", apiErr.Kind)
+	}
+	if connections.Load() != 2 {
+		t.Errorf("connections = %d, want 2", connections.Load())
+	}
+}
+
+// Cut after the data line but before the blank line: the frame was never
+// dispatched, so it comes again after the reconnect.
+func TestStreamRedeliversAFrameCutBeforeItsBlankLine(t *testing.T) {
+	fastBackoff(t)
+	var connections atomic.Int32
+	var resumedFrom string
+	client, _ := listenerClient(t, func(w http.ResponseWriter, r *http.Request) {
+		startSSE(w)
+		if connections.Add(1) == 1 {
+			frame := webhookFrame("1", "evt_1")
+			writeSSE(w, frame[:len(frame)-1])
+			return
+		}
+		resumedFrom = r.Header.Get("Last-Event-ID")
+		writeSSE(w, webhookFrame("1", "evt_1"), closedFrame)
+	})
+
+	result := collectWithin(t, 5*time.Second, client, manza.WebhookListenerStreamOptions{})
+	if len(result.errs) != 0 {
+		t.Fatalf("errors: %v", result.errs)
+	}
+	if resumedFrom != "" {
+		t.Errorf("reconnect Last-Event-ID = %q, want none", resumedFrom)
+	}
+	if got := eventIDs(result.events); got != "[evt_1]" {
+		t.Errorf("events = %s", got)
+	}
+}
+
+// A 2xx that is not an event stream (a proxy page, a wrong base URL) is not
+// a stream: the first connect fails instead of being redialled forever.
+func TestStreamRefusesAResponseThatIsNotAnEventStream(t *testing.T) {
+	fastBackoff(t)
+	var connections atomic.Int32
+	client, _ := listenerClient(t, func(w http.ResponseWriter, r *http.Request) {
+		connections.Add(1)
+		w.Header().Set("Content-Type", "text/html")
+		io.WriteString(w, "<html></html>")
+	})
+
+	result := collectWithin(t, 5*time.Second, client, manza.WebhookListenerStreamOptions{})
+	var connErr *manza.ConnectionError
+	if len(result.errs) != 1 || !errors.As(result.errs[0], &connErr) {
+		t.Fatalf("errors = %v, want one *ConnectionError", result.errs)
+	}
+	if connections.Load() != 1 {
+		t.Errorf("connections = %d, want 1", connections.Load())
+	}
+}
+
+func TestStreamEndsOnAWebhookFrameWithoutItsFields(t *testing.T) {
+	for _, data := range []string{
+		`null`,
+		`{"id":"del_1","event_type":"transfer.executed","event_id":"evt_1"}`,
+		`{"event_type":"transfer.executed","event_id":"evt_1","body":"{}"}`,
+		`{"id":"del_1","event_id":"evt_1","body":"{}"}`,
+		`{"id":"del_1","event_type":"transfer.executed","body":"{}"}`,
+	} {
+		client, _ := listenerClient(t, func(w http.ResponseWriter, r *http.Request) {
+			startSSE(w)
+			writeSSE(w, "id: 1\nevent: webhook\ndata: "+data+"\n\n")
+			<-r.Context().Done()
+		})
+
+		result := collectWithin(t, 5*time.Second, client, manza.WebhookListenerStreamOptions{})
+		if len(result.events) != 0 || len(result.errs) != 1 {
+			t.Errorf("data %s: result = %+v, want one error and no events", data, result)
+		}
+	}
+}

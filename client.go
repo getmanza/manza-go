@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
 	"net/url"
 	"strings"
@@ -213,6 +214,11 @@ func (c *Client) openStream(ctx context.Context, target, lastEventID string) (*h
 		return nil, &ConnectionError{Message: err.Error()}
 	}
 	if raw.StatusCode >= 200 && raw.StatusCode < 300 {
+		mediaType, _, err := mime.ParseMediaType(raw.Header.Get("Content-Type"))
+		if err != nil || mediaType != "text/event-stream" {
+			raw.Body.Close()
+			return nil, &ConnectionError{Message: fmt.Sprintf("stream answered %d with Content-Type %q, not text/event-stream", raw.StatusCode, raw.Header.Get("Content-Type"))}
+		}
 		return raw, nil
 	}
 

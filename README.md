@@ -128,11 +128,12 @@ for event, err := range client.WebhookListeners.Stream(ctx, listener, manza.Webh
 ```
 
 `Stream` reopens a dropped connection with `Last-Event-ID`, backing off from
-500ms to 10s, so no event is lost or repeated (the server keeps about five
-minutes). It ends on the server's `listener_closed`, when `ctx` is done, or
-with one error: a 4xx other than 429, a first connect that fails, or a
-`stream_url` that is not on the client's API host (the API key is never sent
-elsewhere). It ignores the HTTP client's `Timeout`; `ctx` bounds the stream.
+500ms to 10s (at least a 429's `Retry-After`), so no event is lost or
+repeated (the server keeps about five minutes). It ends on the server's
+`listener_closed`, when `ctx` is done, or with one error: a 4xx other than
+429, a first connect that fails (a 2xx that is not `text/event-stream`
+included), a webhook frame missing its fields, or a `stream_url` that is not
+on the client's API host (the API key is never sent elsewhere). It ignores the HTTP client's `Timeout`; `ctx` bounds the stream.
 
 ## Machine-authorized transfers
 

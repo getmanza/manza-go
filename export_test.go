@@ -31,3 +31,8 @@ func SetStreamBackoff(initial, max time.Duration) func() {
 	streamBackoffInitial, streamBackoffMax = initial, max
 	return func() { streamBackoffInitial, streamBackoffMax = prevInitial, prevMax }
 }
+
+// StreamBackoffDefaults returns Stream's reconnect backoff bounds.
+func StreamBackoffDefaults() (initial, max time.Duration) {
+	return streamBackoffInitial, streamBackoffMax
+}

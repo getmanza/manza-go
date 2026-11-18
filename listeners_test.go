@@ -556,7 +556,7 @@ func TestStreamBackoffDefaults(t *testing.T) {
 }
 
 // A server that answers 200 and closes at once must not be redialled at a
-// flat rate: the backoff resets only after a frame arrived.
+// flat rate: the backoff resets only after a webhook arrived.
 func TestStreamBacksOffWhenAnOpenedStreamDropsWithoutAFrame(t *testing.T) {
 	t.Cleanup(manza.SetStreamBackoff(20*time.Millisecond, 80*time.Millisecond))
 	var connections atomic.Int32
@@ -570,7 +570,8 @@ func TestStreamBacksOffWhenAnOpenedStreamDropsWithoutAFrame(t *testing.T) {
 		case n == 6:
 			writeSSE(w, closedFrame)
 		default:
-			writeSSE(w, ": heartbeat\n\n")
+			// The connect handshake is a frame, but not a delivery.
+			writeSSE(w, ": heartbeat\n\n", "id: 0\nevent: pgbus:connected\ndata: {}\n\n")
 		}
 	})
 
@@ -707,5 +708,64 @@ func TestStreamEndsOnAWebhookFrameWithoutItsFields(t *testing.T) {
 		if len(result.events) != 0 || len(result.errs) != 1 {
 			t.Errorf("data %s: result = %+v, want one error and no events", data, result)
 		}
+	}
+}
+
+// A quiet connection that stayed up for the maximum backoff was healthy: the
+// next reconnect starts from the initial backoff again.
+func TestStreamResetsTheBackoffAfterALongLivedQuietConnection(t *testing.T) {
+	t.Cleanup(manza.SetStreamBackoff(20*time.Millisecond, 300*time.Millisecond))
+	var connections atomic.Int32
+	var quietEnded, reconnected time.Time
+	client, _ := listenerClient(t, func(w http.ResponseWriter, r *http.Request) {
+		startSSE(w)
+		switch n := connections.Add(1); {
+		case n <= 4: // drops: the backoff grows to 160ms
+		case n == 5:
+			select {
+			case <-time.After(400 * time.Millisecond):
+			case <-r.Context().Done():
+			}
+			writeSSE(w, ": heartbeat\n\n")
+			quietEnded = time.Now()
+		default:
+			reconnected = time.Now()
+			writeSSE(w, closedFrame)
+		}
+	})
+
+	result := collectWithin(t, 5*time.Second, client, manza.WebhookListenerStreamOptions{})
+	if len(result.errs) != 0 {
+		t.Fatalf("errors: %v", result.errs)
+	}
+	if gap := reconnected.Sub(quietEnded); gap >= 150*time.Millisecond {
+		t.Errorf("reconnected %s after a long quiet connection, want the initial 20ms backoff", gap)
+	}
+}
+
+// After the stream opened, a 2xx that is not an event stream is retried.
+func TestStreamRetriesAResponseThatIsNotAnEventStreamAfterOpening(t *testing.T) {
+	fastBackoff(t)
+	var connections atomic.Int32
+	client, _ := listenerClient(t, func(w http.ResponseWriter, r *http.Request) {
+		switch connections.Add(1) {
+		case 1:
+			startSSE(w)
+			writeSSE(w, webhookFrame("1", "evt_1"))
+		case 2:
+			w.Header().Set("Content-Type", "text/html")
+			io.WriteString(w, "<html></html>")
+		default:
+			startSSE(w)
+			writeSSE(w, webhookFrame("2", "evt_2"), closedFrame)
+		}
+	})
+
+	result := collectWithin(t, 5*time.Second, client, manza.WebhookListenerStreamOptions{})
+	if len(result.errs) != 0 {
+		t.Fatalf("errors: %v", result.errs)
+	}
+	if got := eventIDs(result.events); got != "[evt_1 evt_2]" {
+		t.Errorf("events = %s", got)
 	}
 }

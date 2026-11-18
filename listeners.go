@@ -14,8 +14,8 @@ import (
 )
 
 // Reconnect backoff for WebhookListenersService.Stream: it doubles from
-// streamBackoffInitial up to streamBackoffMax, and resets once a connection
-// opens.
+// streamBackoffInitial up to streamBackoffMax, and resets after a connection
+// delivered a webhook or stayed up for streamBackoffMax.
 var (
 	streamBackoffInitial = 500 * time.Millisecond
 	streamBackoffMax     = 10 * time.Second
@@ -70,7 +70,8 @@ type WebhookListenerStreamOptions struct {
 //
 // A dropped connection is reopened with Last-Event-ID, backing off from
 // 500ms to 10s (at least a 429's Retry-After), so no frame is lost or
-// repeated. The backoff resets only once a connection delivered a frame. The stream ends on a
+// repeated. The backoff resets only after a connection delivered a webhook
+// or stayed up for 10s. The stream ends on a
 // listener_closed frame, when ctx is done (without an error), or with one
 // yielded error:
 //   - *Error for a 4xx other than 429; an expired session answers the
@@ -114,13 +115,15 @@ func (s *WebhookListenersService) Stream(ctx context.Context, listener WebhookLi
 				}
 			} else {
 				opened = true
-				stop, framed := readStream(resp, &lastID, yield)
+				connectedAt := time.Now()
+				stop, delivered := readStream(resp, &lastID, yield)
 				if stop || ctx.Err() != nil {
 					return
 				}
-				// Only a stream that delivered a frame resets the backoff:
-				// one that opens and drops at once is retried more slowly.
-				if framed {
+				// Only a healthy connection resets the backoff: one that
+				// opens (even with a control frame) and drops at once is
+				// retried more slowly each time.
+				if delivered || time.Since(connectedAt) >= streamBackoffMax {
 					backoff, wait = streamBackoffInitial, streamBackoffInitial
 				}
 			}
@@ -137,7 +140,7 @@ func (s *WebhookListenersService) Stream(ctx context.Context, listener WebhookLi
 
 // readStream reads one opened connection, closing its body however the
 // read ends (a panic in the caller's loop included).
-func readStream(resp *http.Response, lastID *string, yield func(ListenerEvent, error) bool) (stop, framed bool) {
+func readStream(resp *http.Response, lastID *string, yield func(ListenerEvent, error) bool) (stop, delivered bool) {
 	defer resp.Body.Close()
 	return readListenerFrames(bufio.NewReader(resp.Body), lastID, yield)
 }
@@ -197,16 +200,16 @@ type listenerFrame struct {
 // webhook frame. *lastID advances only once a frame is complete, so a drop
 // mid-frame re-delivers it. It reports true when the stream must end (the
 // listener closed, the caller stopped, or a malformed frame was yielded)
-// and false when the connection dropped and should be reopened. framed
-// reports whether any frame (of any event type) was dispatched.
-func readListenerFrames(r *bufio.Reader, lastID *string, yield func(ListenerEvent, error) bool) (stop, framed bool) {
+// and false when the connection dropped and should be reopened. delivered
+// reports whether a webhook was yielded.
+func readListenerFrames(r *bufio.Reader, lastID *string, yield func(ListenerEvent, error) bool) (stop, delivered bool) {
 	var event, id string
 	var data []string
 	hasID := false
 	for {
 		line, err := r.ReadString('\n')
 		if err != nil {
-			return false, framed // a partial line is dropped with its frame
+			return false, delivered // a partial line is dropped with its frame
 		}
 		line = strings.TrimSuffix(strings.TrimSuffix(line, "\n"), "\r")
 
@@ -235,21 +238,19 @@ func readListenerFrames(r *bufio.Reader, lastID *string, yield func(ListenerEven
 		if hasID {
 			streamID = id
 		}
-		if event != "" || len(data) > 0 {
-			framed = true
-		}
 		switch event {
 		case "webhook":
 			frame, err := parseWebhookFrame(data)
 			if err != nil {
 				yield(ListenerEvent{}, fmt.Errorf("manza: malformed webhook frame %q: %w", streamID, err))
-				return true, framed
+				return true, delivered
 			}
+			delivered = true
 			if !yield(ListenerEvent{ID: frame.ID, EventType: frame.EventType, EventID: frame.EventID, Body: []byte(*frame.Body), StreamID: streamID}, nil) {
-				return true, framed
+				return true, delivered
 			}
 		case "listener_closed":
-			return true, framed
+			return true, delivered
 		}
 		// Anything else (pgbus:* control frames, unnamed events) is skipped.
 		*lastID = streamID

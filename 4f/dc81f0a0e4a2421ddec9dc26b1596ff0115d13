@@ -1,0 +1,19 @@
+listeners_test.go
+  s_5418b9d6e19a79::t_5d809d39e17264 561-563,584,719,725-726,728,743
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "4fdc81f0a0e4a2421ddec9dc26b1596ff0115d13",
+  "prompts": {},
+  "sessions": {
+    "s_5418b9d6e19a79": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b2c1bf8d-5363-4ea3-9b2d-22ded1558070",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "mhenrixon <mikael@mhenrixon.com>"
+    }
+  }
+}

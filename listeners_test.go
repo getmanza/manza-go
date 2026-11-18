@@ -558,7 +558,9 @@ func TestStreamBackoffDefaults(t *testing.T) {
 // A server that answers 200 and closes at once must not be redialled at a
 // flat rate: the backoff resets only after a webhook arrived.
 func TestStreamBacksOffWhenAnOpenedStreamDropsWithoutAFrame(t *testing.T) {
-	t.Cleanup(manza.SetStreamBackoff(20*time.Millisecond, 80*time.Millisecond))
+	// The max is far above any drop's duration, so the long-lived reset
+	// never fires here even on a slow runner; the gaps stay under it.
+	t.Cleanup(manza.SetStreamBackoff(20*time.Millisecond, 2*time.Second))
 	var connections atomic.Int32
 	var at []time.Time
 	client, _ := listenerClient(t, func(w http.ResponseWriter, r *http.Request) {
@@ -579,7 +581,7 @@ func TestStreamBacksOffWhenAnOpenedStreamDropsWithoutAFrame(t *testing.T) {
 	if len(result.errs) != 0 || len(result.events) != 1 {
 		t.Fatalf("result = %+v", result)
 	}
-	want := []time.Duration{20, 40, 80, 80, 80}
+	want := []time.Duration{20, 40, 80, 160, 320}
 	for i, min := range want {
 		if gap := at[i+1].Sub(at[i]); gap < min*time.Millisecond {
 			t.Errorf("gap %d = %s, want at least %dms", i+1, gap, min)
@@ -714,16 +716,16 @@ func TestStreamEndsOnAWebhookFrameWithoutItsFields(t *testing.T) {
 // A quiet connection that stayed up for the maximum backoff was healthy: the
 // next reconnect starts from the initial backoff again.
 func TestStreamResetsTheBackoffAfterALongLivedQuietConnection(t *testing.T) {
-	t.Cleanup(manza.SetStreamBackoff(20*time.Millisecond, 300*time.Millisecond))
+	t.Cleanup(manza.SetStreamBackoff(20*time.Millisecond, 600*time.Millisecond))
 	var connections atomic.Int32
 	var quietEnded, reconnected time.Time
 	client, _ := listenerClient(t, func(w http.ResponseWriter, r *http.Request) {
 		startSSE(w)
 		switch n := connections.Add(1); {
-		case n <= 4: // drops: the backoff grows to 160ms
-		case n == 5:
+		case n <= 6: // drops: the backoff grows to its 600ms cap
+		case n == 7:
 			select {
-			case <-time.After(400 * time.Millisecond):
+			case <-time.After(700 * time.Millisecond):
 			case <-r.Context().Done():
 			}
 			writeSSE(w, ": heartbeat\n\n")
@@ -738,7 +740,7 @@ func TestStreamResetsTheBackoffAfterALongLivedQuietConnection(t *testing.T) {
 	if len(result.errs) != 0 {
 		t.Fatalf("errors: %v", result.errs)
 	}
-	if gap := reconnected.Sub(quietEnded); gap >= 150*time.Millisecond {
+	if gap := reconnected.Sub(quietEnded); gap >= 300*time.Millisecond {
 		t.Errorf("reconnected %s after a long quiet connection, want the initial 20ms backoff", gap)
 	}
 }
